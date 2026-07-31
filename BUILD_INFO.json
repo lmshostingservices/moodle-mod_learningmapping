@@ -1,0 +1,11 @@
+{
+  "component": "mod_learningmapping",
+  "version": "1.0.47",
+  "numeric_version": "2026042200047",
+  "build_timestamp": "2026-04-22T07:07:50.404Z",
+  "folder": "mod_learningmapping",
+  "verification": "amd_encoding_fix_non_ascii_clean",
+  "changelog": [
+    "v1.0.46 - BUG FIX (FIX-LM-SYNC): analyzeWithAI() was using async polling (analyzemapping_async) which POSTs to /api/generate-learningmapping/start — an endpoint not available on the production server — causing 'Unknown action' errors. Reverted to direct sync analyzemapping action (150s timeout). FIX-LM-SELECT: scan results now show checkboxes per activity card plus Select All/Deselect All. doAnalyse() only sends checked activities to AI. AMD: mapping.js (src=build=min). No DB schema changes."
+  ]
+}
