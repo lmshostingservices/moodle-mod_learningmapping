@@ -30,7 +30,7 @@ header('Content-Type: application/json; charset=utf-8');
 try {
     $action    = required_param('action', PARAM_ALPHANUMEXT);
     $mappingid = required_param('mappingid', PARAM_INT);
-    $sesskey   = required_param('sesskey', PARAM_RAW);
+    $sesskey   = required_param('sesskey', PARAM_RAW); // pipeline-ignore: PARAM_RAW — opaque session key token, validated via confirm_sesskey()
 
     if (!confirm_sesskey($sesskey)) {
         http_response_code(403);
