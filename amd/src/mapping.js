@@ -1,15 +1,18 @@
 define(['jquery'], function($) {
     return {
-        init: function(mappingId, courseId, unitCode, savedDataStr, canManage, sesskey) {
+        init: function(mappingId, courseId, unitCode, savedDataStr, canManage, sesskey, framework) {
 
             var ajaxUrl = M.cfg.wwwroot + '/mod/learningmapping/ajax.php';
+            var isVetFramework = !framework || framework === 'vet';
             var state = {
                 unitCode: unitCode || '',
+                framework: framework || 'vet',
                 unitData: null,
                 rows: [],
                 columns: [],
                 cells: {},
                 acData: [],
+                coverage: {},
                 courseModules: [],
                 dirty: false,
                 saving: false
@@ -17,7 +20,7 @@ define(['jquery'], function($) {
             var lastScannedModules = null;
 
             var defaultColumns = [
-                { id: 'col_elements', title: 'Elements & Performance Criteria', group: 'unit', locked: true, width: 260 }
+                { id: 'col_elements', title: isVetFramework ? 'Elements & Performance Criteria' : 'Learning outcomes', group: 'unit', locked: true, width: 260 }
             ];
 
             window.addEventListener('beforeunload', function(e) {
@@ -39,6 +42,7 @@ define(['jquery'], function($) {
                         state.columns = saved.columns;
                         state.cells = saved.cells || {};
                         state.unitData = saved.unitData || null;
+                        state.coverage = saved.coverage || {};
 
                         if (saved.acData && Array.isArray(saved.acData)) {
                             state.acData = saved.acData;
@@ -433,7 +437,8 @@ define(['jquery'], function($) {
                         columns: state.columns,
                         cells: state.cells,
                         unitData: state.unitData,
-                        acData: state.acData
+                        acData: state.acData,
+                        coverage: state.coverage
                     }
                 };
 
@@ -599,7 +604,7 @@ define(['jquery'], function($) {
 
             function getGroupLabel(group) {
                 switch (group) {
-                    case 'unit': return 'Unit of Competency';
+                    case 'unit': return isVetFramework ? 'Unit of Competency' : 'Curriculum outcomes';
                     case 'learning': return 'Learning';
                     case 'assessment': return 'Assessment';
                     case 'custom': return 'Custom';
@@ -688,7 +693,7 @@ define(['jquery'], function($) {
                     html += '<div class="lm-empty-state">';
                     html += '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
                     html += '<p>No mapping rows yet</p>';
-                    html += '<p class="lm-empty-hint">Paste TGA unit data above or add rows manually</p>';
+                    html += '<p class="lm-empty-hint">' + (isVetFramework ? 'Paste TGA unit data above or add rows manually' : 'Paste your curriculum outcomes above or add rows manually') + '</p>';
                     html += '</div>';
                     html += '</td></tr>';
                 }
@@ -718,6 +723,10 @@ define(['jquery'], function($) {
                             html += '<div class="lm-cell-edit" contenteditable="true" data-row-id="' + row.id + '" data-col-id="' + col.id + '" data-testid="cell-' + row.id + '-' + col.id + '">' + escapeHtml(cellVal) + '</div>';
                         } else {
                             html += '<div class="lm-cell-view">' + escapeHtml(cellVal) + '</div>';
+                        }
+                        var coverageType = state.coverage[getCellKey(row.id, col.id)];
+                        if (['introduced', 'practised', 'assessed'].indexOf(coverageType) !== -1) {
+                            html += '<span class="lm-coverage-badge lm-coverage-' + escapeHtml(coverageType) + '">' + escapeHtml(coverageType) + '</span>';
                         }
                         html += '</td>';
                     });
@@ -1100,6 +1109,11 @@ define(['jquery'], function($) {
             function renderACTable() {
                 var container = document.getElementById('lm-ac-wrap');
                 if (!container) return;
+                // Assessment conditions are a VET (training package) concept; other frameworks don't have them.
+                if (!isVetFramework && !(state.acData && state.acData.length)) {
+                    container.innerHTML = '';
+                    return;
+                }
 
                 var addIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
                 var removeIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
@@ -1395,18 +1409,20 @@ define(['jquery'], function($) {
                     html += '<div class="lm-step' + (hasRows ? ' lm-step-done' : '') + '">';
                     html += '<div class="lm-step-header">';
                     html += '<span class="lm-step-number">' + (hasRows ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '1') + '</span>';
-                    html += '<span class="lm-step-title">Add TGA Unit Data</span>';
+                    html += '<span class="lm-step-title">' + (isVetFramework ? 'Add TGA Unit Data' : 'Add curriculum outcomes') + '</span>';
                     html += '</div>';
                     html += '<div class="lm-step-body">';
-                    html += '<p class="lm-step-desc">Fetch directly from training.gov.au by unit code, or paste raw text.</p>';
-                    html += '<div class="lm-fetch-tga-row">';
-                    html += '<input type="text" class="lm-input lm-fetch-tga-input" id="lm-tga-code-input" placeholder="e.g. BSBTEC201" value="' + escapeHtml(state.unitCode || '') + '" data-testid="input-tga-code" />';
-                    html += '<button type="button" class="lm-btn lm-btn-primary" id="lm-fetch-tga-btn" data-testid="button-fetch-tga">' + scanIcon + ' Fetch from TGA</button>';
-                    html += '</div>';
+                    html += '<p class="lm-step-desc">' + (isVetFramework ? 'Fetch directly from training.gov.au by unit code, or paste raw text.' : 'Paste curriculum outcomes or requirements, one per line.') + '</p>';
+                    if (isVetFramework) {
+                        html += '<div class="lm-fetch-tga-row">';
+                        html += '<input type="text" class="lm-input lm-fetch-tga-input" id="lm-tga-code-input" placeholder="e.g. BSBTEC201" value="' + escapeHtml(state.unitCode || '') + '" data-testid="input-tga-code" />';
+                        html += '<button type="button" class="lm-btn lm-btn-primary" id="lm-fetch-tga-btn" data-testid="button-fetch-tga">' + scanIcon + ' Fetch from TGA</button>';
+                        html += '</div>';
+                    }
                     html += '<details class="lm-details lm-paste-details">';
-                    html += '<summary class="lm-summary lm-summary-sm">Or paste text manually</summary>';
+                    html += '<summary class="lm-summary lm-summary-sm">' + (isVetFramework ? 'Or paste text manually' : 'Paste outcomes or requirements') + '</summary>';
                     html += '<div class="lm-details-content lm-details-content-sm">';
-                    html += '<textarea class="lm-textarea" id="lm-tga-paste" rows="6" placeholder="Paste TGA unit elements, performance criteria, foundation skills, KE, PE here..." data-testid="textarea-tga-paste"></textarea>';
+                    html += '<textarea class="lm-textarea" id="lm-tga-paste" rows="6" placeholder="' + (isVetFramework ? 'Paste TGA unit elements, performance criteria, foundation skills, KE, PE here...' : 'Paste one outcome or curriculum requirement per line...') + '" data-testid="textarea-tga-paste"></textarea>';
                     html += '</div>';
                     html += '</details>';
                     html += '</div>';
@@ -1418,8 +1434,8 @@ define(['jquery'], function($) {
                     html += '<span class="lm-step-title">Parse & Build Table</span>';
                     html += '</div>';
                     html += '<div class="lm-step-body">';
-                    html += '<p class="lm-step-desc">Parse the TGA text into elements, performance criteria, KE, PE and foundation skills rows.</p>';
-                    html += '<button type="button" class="lm-btn lm-btn-primary" id="lm-parse-tga-btn" data-testid="button-parse-tga">' + fileIcon + ' Parse & Build Rows</button>';
+                    html += '<p class="lm-step-desc">' + (isVetFramework ? 'Parse the TGA text into elements, performance criteria, KE, PE and foundation skills rows.' : 'Create one outcome row for each non-empty line of pasted curriculum text.') + '</p>';
+                    html += '<button type="button" class="lm-btn lm-btn-primary" id="lm-parse-tga-btn" data-testid="button-parse-tga">' + fileIcon + (isVetFramework ? ' Parse & Build Rows' : ' Build Outcome Rows') + '</button>';
                     html += '</div>';
                     html += '</div>';
 
@@ -1441,7 +1457,7 @@ define(['jquery'], function($) {
                     html += '<span class="lm-step-badge">100 credits</span>';
                     html += '</div>';
                     html += '<div class="lm-step-body">';
-                    html += '<p class="lm-step-desc">AI maps scanned activities to your TGA rows. Only empty cells are filled  -  existing entries are preserved.</p>';
+                    html += '<p class="lm-step-desc">AI maps scanned activities to your ' + (isVetFramework ? 'TGA rows' : 'outcome rows') + '. Only empty cells are filled; existing entries are preserved.</p>';
                     html += '<button type="button" class="lm-btn lm-btn-ai-action" id="lm-ai-analyse-btn" data-testid="button-ai-analyse">' + aiIcon + ' AI Analyse</button>';
                     html += '</div>';
                     html += '</div>';
@@ -1478,6 +1494,19 @@ define(['jquery'], function($) {
             }
 
             function renderStats() {
+                if (!isVetFramework) {
+                    var outcomeRows = state.rows.filter(function(row) { return !row.isShaded; });
+                    var coveredRows = outcomeRows.filter(function(row) {
+                        return state.columns.some(function(column) {
+                            return column.id !== 'col_elements' && !!getCellValue(row.id, column.id);
+                        });
+                    }).length;
+                    var html = '';
+                    html += '<div class="lm-stat"><span class="lm-stat-value">' + outcomeRows.length + '</span><span class="lm-stat-label">Outcomes</span></div>';
+                    html += '<div class="lm-stat"><span class="lm-stat-value">' + coveredRows + '</span><span class="lm-stat-label">Outcomes mapped</span></div>';
+                    html += '<div class="lm-stat"><span class="lm-stat-value">' + state.columns.length + '</span><span class="lm-stat-label">Activity columns</span></div>';
+                    return html;
+                }
                 /* Build a row-id  ->  row lookup so we can check each PC's parent. */
                 var rowMap = {};
                 state.rows.forEach(function(r) { rowMap[r.id] = r; });
@@ -1698,7 +1727,41 @@ define(['jquery'], function($) {
                 $('#lm-parse-tga-btn').on('click', function() {
                     var text = document.getElementById('lm-tga-paste').value.trim();
                     if (!text) {
-                        showToast('Please paste TGA unit data first', 'error');
+                        showToast(isVetFramework ? 'Please paste TGA unit data first' : 'Please paste curriculum outcomes first', 'error');
+                        return;
+                    }
+                    if (!isVetFramework) {
+                        var outcomes = text.split(/\r?\n/).map(function(line) {
+                            return line.replace(/^\s*(?:[-*•]|\d+(?:\.\d+)*[.)]?)\s*/, '').trim();
+                        }).filter(function(line) { return line.length > 0; }).slice(0, 250);
+                        if (!outcomes.length) {
+                            showToast('Could not find any curriculum outcomes. Put one outcome on each line.', 'error');
+                            return;
+                        }
+                        var buildOutcomeRows = function() {
+                            state.rows = outcomes.map(function(outcome) {
+                                return { id: generateId(), title: outcome, isElement: false, isShaded: false, parentId: null };
+                            });
+                            state.cells = {};
+                            state.coverage = {};
+                            state.acData = [];
+                            state.unitData = { raw: text, outcomes: outcomes };
+                            state.dirty = true;
+                            renderTable();
+                            renderACTable();
+                            updateStats();
+                            updateSaveButton();
+                            showToast(outcomes.length + ' outcome rows created', 'success');
+                        };
+                        if (state.rows.length > 0) {
+                            showConfirm('This will replace all existing rows with pasted curriculum outcomes.', {
+                                title: 'Replace Existing Rows?',
+                                confirmText: 'Replace',
+                                type: 'warning'
+                            }).then(function(ok) { if (ok) buildOutcomeRows(); });
+                        } else {
+                            buildOutcomeRows();
+                        }
                         return;
                     }
                     var parsed = parseUnitDataFromPaste(text);
@@ -1751,7 +1814,7 @@ define(['jquery'], function($) {
                 $('#lm-ai-analyse-btn').on('click', function() {
                     var btn = this;
                     if (state.rows.length === 0) {
-                        showToast('Add rows first  -  paste TGA unit data or add rows manually', 'error');
+                        showToast(isVetFramework ? 'Add rows first: paste TGA unit data or add rows manually' : 'Add rows first: paste your curriculum outcomes or add rows manually', 'error');
                         return;
                     }
                     var aiIcon = btn.innerHTML.substring(0, btn.innerHTML.indexOf('</svg>') + 6);
@@ -1968,6 +2031,10 @@ define(['jquery'], function($) {
                                 var existing = state.cells[key] || '';
                                 if (!existing.trim()) {
                                     state.cells[key] = cleaned;
+                                    if (!isVetFramework && mapping.coverageTypes &&
+                                            ['introduced', 'practised', 'assessed'].indexOf(mapping.coverageTypes[colId]) !== -1) {
+                                        state.coverage[key] = mapping.coverageTypes[colId];
+                                    }
                                 }
                             }
                         }

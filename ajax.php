@@ -24,6 +24,7 @@
 
 define('AJAX_SCRIPT', true);
 require_once(__DIR__ . '/../../config.php');
+require_once($CFG->dirroot . '/mod/learningmapping/lib.php');
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -121,6 +122,8 @@ switch ($action) {
         }
         $payload['siteId'] = $siteid;
         $payload['apiKey'] = $apikey;
+        $payload['framework'] = $mapping->framework ?? 'vet';
+        $payload['frameworkdata'] = !empty($mapping->frameworkdata) ? (json_decode($mapping->frameworkdata, true) ?: []) : [];
 
         \core\session\manager::write_close();
 
@@ -228,6 +231,11 @@ switch ($action) {
         break;
 
     case 'fetchtga':
+        if (($mapping->framework ?? 'vet') !== 'vet') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'training.gov.au lookup is only available for VET mapping']);
+            break;
+        }
         require_capability('mod/learningmapping:manage', $context);
         if (strlen($siteid) === 0 || strlen($apikey) === 0) {
             echo json_encode(['ok' => false, 'error' => 'Plugin not configured: Missing Site ID or API Key.']);
@@ -666,17 +674,11 @@ switch ($action) {
             echo json_encode(['error' => 'Invalid payload']);
             die();
         }
-        $DB->set_field('learningmapping', 'mappingdata', \mod_learningmapping\manifest_storage::compress(json_encode($payload['mappingdata'])), ['id' => $mappingid]);
-        $DB->set_field('learningmapping', 'timemodified', time(), ['id' => $mappingid]);
-        if (isset($payload['mappingdata']['unitData'])) {
-            $DB->set_field('learningmapping', 'unitdata', \mod_learningmapping\manifest_storage::compress(json_encode($payload['mappingdata']['unitData'])), ['id' => $mappingid]);
-        }
-        if (!empty($payload['unitCode'])) {
-            $unitcodeClean = clean_param($payload['unitCode'], PARAM_TEXT);
-            if (strlen($unitcodeClean) <= 20) {
-                $DB->set_field('learningmapping', 'unitcode', $unitcodeClean, ['id' => $mappingid]);
-            }
-        }
+        learningmapping_store_mappingdata(
+            $mappingid,
+            $payload['mappingdata'],
+            (string)($payload['unitCode'] ?? '')
+        );
         echo json_encode(['success' => true]);
         break;
 

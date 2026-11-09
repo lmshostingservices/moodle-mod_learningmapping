@@ -53,6 +53,7 @@ $canmanage = has_capability('mod/learningmapping:manage', $context);
 $courseid = $course->id;
 $mappingid = $mapping->id;
 $unitcode = $mapping->unitcode ?? '';
+$framework = $mapping->framework ?? 'vet';
 $saveddata = \mod_learningmapping\manifest_storage::decompress($mapping->mappingdata ?? '{}');
 
 $PAGE->requires->js_call_amd('mod_learningmapping/mapping', 'init', [
@@ -61,7 +62,8 @@ $PAGE->requires->js_call_amd('mod_learningmapping/mapping', 'init', [
     $unitcode,
     $saveddata,
     $canmanage,
-    sesskey()
+    sesskey(),
+    $framework
 ]);
 
 echo $OUTPUT->header();

@@ -29,5 +29,19 @@ function xmldb_learningmapping_upgrade($oldversion) {
     if ($oldversion < 2026072300) {
         upgrade_mod_savepoint(true, 2026072300, 'learningmapping');
     }
+    if ($oldversion < 2026110502) {
+        global $DB;
+        $dbman = $DB->get_manager();
+        $table = new xmldb_table('learningmapping');
+        $framework = new xmldb_field('framework', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, 'vet', 'unitcode');
+        if (!$dbman->field_exists($table, $framework)) {
+            $dbman->add_field($table, $framework);
+        }
+        $frameworkdata = new xmldb_field('frameworkdata', XMLDB_TYPE_TEXT, null, null, null, null, null, 'framework');
+        if (!$dbman->field_exists($table, $frameworkdata)) {
+            $dbman->add_field($table, $frameworkdata);
+        }
+        upgrade_mod_savepoint(true, 2026110502, 'learningmapping');
+    }
     return true;
 }
