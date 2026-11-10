@@ -33,7 +33,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component  = 'mod_learningmapping';
-$plugin->version    = 2026111000;
+$plugin->version    = 2026111001;
 $plugin->requires   = 2022041900;
 $plugin->maturity   = MATURITY_STABLE;
-$plugin->release    = '1.0.59';
+$plugin->release    = '1.0.60';

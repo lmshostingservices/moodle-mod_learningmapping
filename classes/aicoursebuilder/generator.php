@@ -60,6 +60,10 @@ class generator {
             'unitCode' => (string)($instance->unitcode ?? ''),
             'framework' => (string)($instance->framework ?? 'vet'),
             'frameworkdata' => is_array($frameworkdata) ? $frameworkdata : [],
+            // The same key for every start of this Course Builder job, so a retry after a timeout
+            // or a lost connection returns the job already running instead of charging again.
+            'idempotencyKey' => (string)($brief['idempotencyKey'] ?? ''),
+            'attempt' => (int)($brief['attempt'] ?? 1),
         ];
         $started = \local_aicoursebuilder\local\api_client::request_json(
             'POST',

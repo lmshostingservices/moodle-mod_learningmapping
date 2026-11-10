@@ -1,5 +1,8 @@
 # AI Mapping
 
+## [1.0.60] - 2026-11-10
+- Course Builder requests carry a stable `idempotencyKey` and the `attempt` number, so a retry after a timeout returns the job already running instead of charging again.
+
 ## [1.0.59] - 2026-11-10
 
 - Course Builder mappings start with a locked outcome column ("Elements & Performance Criteria" for VET, "Learning outcomes" otherwise), as in a mapping made by hand. Before this the first activity column doubled as the outcome column, which hid the outcome of every row mapped to that activity.
