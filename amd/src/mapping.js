@@ -43,6 +43,7 @@ define(['jquery'], function($) {
                         state.cells = saved.cells || {};
                         state.unitData = saved.unitData || null;
                         state.coverage = saved.coverage || {};
+                        state.courseBuilderGenerated = !!saved.courseBuilderGenerated;
 
                         if (saved.acData && Array.isArray(saved.acData)) {
                             state.acData = saved.acData;
@@ -1404,6 +1405,13 @@ define(['jquery'], function($) {
                     var hasRows = state.rows.length > 0;
                     var hasText = false;
 
+                    if (state.courseBuilderGenerated) {
+                        // Made by AI Course Builder: the table is ready, so the build steps are
+                        // tucked away and not presented as things still to do (or to pay for).
+                        html += '<div class="alert alert-info lm-cb-note">This mapping was built by AI Course Builder ' +
+                            'from the curriculum outcomes and the course activities. You can edit any cell, then save.';
+                        html += '<details class="mt-2"><summary>Rebuild the mapping</summary>';
+                    }
                     html += '<div class="lm-workflow">';
 
                     html += '<div class="lm-step' + (hasRows ? ' lm-step-done' : '') + '">';
@@ -1473,6 +1481,9 @@ define(['jquery'], function($) {
                     html += '</div>';
 
                     html += '</div>';
+                    if (state.courseBuilderGenerated) {
+                        html += '</details></div>';
+                    }
                 }
 
                 html += '<div class="lm-stats-bar" id="lm-stats-bar">';
@@ -1504,7 +1515,7 @@ define(['jquery'], function($) {
                     var html = '';
                     html += '<div class="lm-stat"><span class="lm-stat-value">' + outcomeRows.length + '</span><span class="lm-stat-label">Outcomes</span></div>';
                     html += '<div class="lm-stat"><span class="lm-stat-value">' + coveredRows + '</span><span class="lm-stat-label">Outcomes mapped</span></div>';
-                    html += '<div class="lm-stat"><span class="lm-stat-value">' + state.columns.length + '</span><span class="lm-stat-label">Activity columns</span></div>';
+                    html += '<div class="lm-stat"><span class="lm-stat-value">' + state.columns.filter(function(c) { return c.group !== 'unit'; }).length + '</span><span class="lm-stat-label">Activity columns</span></div>';
                     return html;
                 }
                 /* Build a row-id  ->  row lookup so we can check each PC's parent. */

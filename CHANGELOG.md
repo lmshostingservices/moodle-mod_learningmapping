@@ -1,5 +1,13 @@
 # AI Mapping
 
+## [1.0.59] - 2026-11-10
+
+- Course Builder mappings start with a locked outcome column ("Elements & Performance Criteria" for VET, "Learning outcomes" otherwise), as in a mapping made by hand. Before this the first activity column doubled as the outcome column, which hid the outcome of every row mapped to that activity.
+- A mapping built by Course Builder no longer shows the setup steps as work still to do. They are under "Rebuild the mapping", with a note that the table is ready to edit.
+- "Activity columns" no longer counts the outcome column.
+- Hidden activities are left out of the mapping.
+- A generation that times out, or hits a busy or unavailable provider, is retried automatically.
+
 ## [1.0.58] - 2026-11-09
 - Limit Course Builder mapping rows to the current course unit's teacher-provided outcomes.
 - Exclude the course announcements forum from activity columns and preserve planned outcome-to-activity links.

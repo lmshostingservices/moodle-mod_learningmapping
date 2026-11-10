@@ -54,7 +54,8 @@ class generator {
         $frameworkdata = json_decode((string)($instance->frameworkdata ?? ''), true);
         $payload = [
             'rows' => $outcomes,
-            'columns' => $modules['columns'],
+            // Only activity columns are mapped; the outcome column is local to the table.
+            'columns' => array_values(array_filter($modules['columns'], static fn($c) => $c['id'] !== 'col_elements')),
             'scannedModules' => $modules['modules'],
             'unitCode' => (string)($instance->unitcode ?? ''),
             'framework' => (string)($instance->framework ?? 'vet'),
@@ -88,7 +89,7 @@ class generator {
             return ['status' => 'running', 'retryable' => false];
         }
         if (($poll['status'] ?? '') === 'error') {
-            return ['status' => 'failed', 'retryable' => false, 'error' => clean_param((string)($poll['error'] ?? 'AI Mapping generation failed.'), PARAM_TEXT)];
+            return ['status' => 'failed', 'retryable' => (bool)preg_match('/timeout|timed out|providers exhausted|temporarily|overloaded|rate limit/i', (string)($poll['error'] ?? '')), 'error' => clean_param((string)($poll['error'] ?? 'AI Mapping generation failed.'), PARAM_TEXT)];
         }
         $result = $poll['result'] ?? null;
         if (($poll['status'] ?? '') !== 'done' || !is_array($result) || empty($result['ok']) || !is_array($result['mappings'] ?? null)) {
@@ -188,10 +189,21 @@ class generator {
         global $DB;
         $modinfo = get_fast_modinfo($courseid);
         $planned = self::planned_outcomes_by_section($courseid);
-        $columns = [];
+        // The first column holds each row's outcome text, as in a mapping made by hand.
+        // Without it the first activity column doubled as the outcome column, hiding the
+        // outcome of any row mapped to that activity.
+        $vet = $DB->get_field('learningmapping', 'framework', ['id' => (int)$DB->get_field(
+            'course_modules', 'instance', ['id' => $mappingcmid])]) === 'vet';
+        $columns = [[
+            'id' => 'col_elements',
+            'title' => $vet ? 'Elements & Performance Criteria' : 'Learning outcomes',
+            'group' => 'unit',
+            'locked' => true,
+            'width' => 260,
+        ]];
         $modules = [];
         foreach ($modinfo->get_cms() as $cm) {
-            if (!empty($cm->deletioninprogress) || (int)$cm->id === $mappingcmid
+            if (!empty($cm->deletioninprogress) || !$cm->visible || (int)$cm->id === $mappingcmid
                     || in_array($cm->modname, ['courseinfo', 'learningmapping'], true)) {
                 continue;
             }
