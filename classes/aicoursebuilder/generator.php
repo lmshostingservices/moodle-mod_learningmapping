@@ -304,12 +304,23 @@ class generator {
         if (!$unit) {
             return [];
         }
+        // Lessons store outcome keys (a code such as "LO3", or the text when there is no code).
+        // The service needs the outcome text to match activities to rows.
+        $programid = (int)$DB->get_field('local_aicoursebuilder_unit', 'programid', ['id' => $unit->id]);
+        $texts = [];
+        foreach ($DB->get_records('local_aicoursebuilder_outcome', ['programid' => $programid]) as $o) {
+            $text = trim((string)($o->outcometext ?? $o->text ?? ''));
+            if ($text !== '' && trim((string)($o->code ?? '')) !== '') {
+                $texts[trim((string)$o->code)] = trim((string)$o->code) . ' ' . $text;
+            }
+        }
         $out = [];
         foreach ($DB->get_records('local_aicoursebuilder_lesson', ['unitid' => $unit->id], 'lessonnumber ASC',
                 'id, lessonnumber, sectionid, outcomesjson') as $lesson) {
             $sectionnum = $lesson->sectionid ? (int)$DB->get_field('course_sections', 'section', ['id' => $lesson->sectionid]) : (int)$lesson->lessonnumber;
             foreach (json_decode((string)$lesson->outcomesjson, true) ?: [] as $outcome) {
                 $text = trim(is_array($outcome) ? (string)($outcome['text'] ?? '') : (string)$outcome);
+                $text = $texts[$text] ?? $text;
                 if ($text !== '') {
                     $out[$sectionnum][] = $text;
                 }

@@ -1,5 +1,8 @@
 # AI Mapping
 
+## [1.0.61] - 2026-11-11
+- Course Builder tells the service each lesson's outcomes in full (code and text), not only their codes. Before this, outcomes with codes such as "LO4" were often linked to one activity only, because the service could not match the code to the outcome row.
+
 ## [1.0.60] - 2026-11-10
 - Course Builder requests carry a stable `idempotencyKey` and the `attempt` number, so a retry after a timeout returns the job already running instead of charging again.
 
