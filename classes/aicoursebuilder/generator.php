@@ -100,7 +100,7 @@ class generator {
             return ['status' => 'failed', 'retryable' => false, 'error' => clean_param((string)($result['error'] ?? 'AI Mapping returned an invalid result.'), PARAM_TEXT)];
         }
         $unit = $DB->get_record('local_aicoursebuilder_unit', ['courseid' => $cm->course], 'programid', MUST_EXIST);
-        $rows = self::outcome_rows((int)$unit->programid, (int)$cm->course);
+        $rows = self::outcome_rows((int)$unit->programid, (int)$cm->course, ($instance->framework ?? 'vet') === 'vet');
         $modules = self::course_modules((int)$cm->course, $cmid);
         $cells = [];
         $coverage = [];
@@ -121,6 +121,17 @@ class generator {
             }
         }
         self::add_planned_links((int)$cm->course, $rows, $cells, $coverage);
+        // Every mapped cell says whether it introduces, practises or assesses the outcome.
+        $modnames = [];
+        foreach ($modules['modules'] as $index => $module) {
+            $modnames[$modules['columns'][$index + 1]['id'] ?? ''] = (string)($module['modname'] ?? '');
+        }
+        foreach (array_keys($cells) as $key) {
+            if (!isset($coverage[$key])) {
+                $columnid = substr($key, strpos($key, '::') + 2);
+                $coverage[$key] = self::coverage_for($modnames[$columnid] ?? '');
+            }
+        }
         $mappingdata = [
             'rows' => $rows,
             'columns' => $modules['columns'],
@@ -156,9 +167,10 @@ class generator {
     /**
      * @param int $programid
      * @param int $courseid limit to the outcomes of the unit that owns this course (0 for all)
+     * @param bool $withelements add a row for each element above its performance criteria
      * @return array
      */
-    private static function outcome_rows(int $programid, int $courseid = 0): array {
+    private static function outcome_rows(int $programid, int $courseid = 0, bool $withelements = false): array {
         global $DB;
         if ($programid < 1) {
             return [];
@@ -172,16 +184,51 @@ class generator {
             }
         }
         $rows = [];
+        $elements = [];
         foreach ($records as $record) {
+            $code = trim(clean_param((string)($record->code ?? ''), PARAM_TEXT));
+            $text = clean_param((string)$record->outcometext, PARAM_TEXT);
+            $parent = null;
+            // A training package unit reads as elements with their performance criteria, as in a mapping made by hand.
+            $strand = trim(clean_param((string)($record->strand ?? ''), PARAM_TEXT));
+            if ($withelements && preg_match('/^element\s*(\d+)\s*[:.\-–]?\s*(.*)$/iu', $strand, $m)) {
+                $parent = 'element_' . (int)$m[1];
+                if (!isset($elements[$parent])) {
+                    $elements[$parent] = true;
+                    $rows[] = [
+                        'id' => $parent,
+                        'title' => 'Element ' . (int)$m[1] . ($m[2] !== '' ? ': ' . $m[2] : ''),
+                        'isElement' => true,
+                        'isShaded' => false,
+                        'parentId' => null,
+                    ];
+                }
+            }
             $rows[] = [
                 'id' => 'outcome_' . (int)$record->id,
-                'title' => clean_param((string)$record->outcometext, PARAM_TEXT),
+                'title' => ($code !== '' && strpos($text, $code) !== 0 ? $code . ' ' : '') . $text,
                 'isElement' => false,
                 'isShaded' => false,
-                'parentId' => null,
+                'parentId' => $parent,
             ];
         }
         return $rows;
+    }
+
+    /**
+     * How an activity covers an outcome, from what kind of activity it is.
+     *
+     * @param string $modname
+     * @return string introduced, practised or assessed
+     */
+    private static function coverage_for(string $modname): string {
+        if (in_array($modname, ['aiknowledgecheck', 'quiz', 'assign', 'practicalassessment'], true)) {
+            return 'assessed';
+        }
+        if (in_array($modname, ['visuallearning', 'contentcreator', 'productexplainer', 'page', 'book'], true)) {
+            return 'introduced';
+        }
+        return 'practised';
     }
 
     /**

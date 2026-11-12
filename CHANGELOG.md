@@ -1,5 +1,9 @@
 # AI Mapping
 
+## [1.0.62] - 2026-11-12
+- Course Builder mappings for a training package unit show each element with its performance criteria ("1.1 Follow safe work practices ..."), so the counts and codes are filled in.
+- Every mapped cell shows whether the activity introduces, practises or assesses the outcome, even when the service leaves this out.
+
 ## [1.0.61] - 2026-11-11
 - Course Builder tells the service each lesson's outcomes in full (code and text), not only their codes. Before this, outcomes with codes such as "LO4" were often linked to one activity only, because the service could not match the code to the outcome row.
 
