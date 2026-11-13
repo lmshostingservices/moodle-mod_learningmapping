@@ -73,6 +73,24 @@ if (empty($apikey)) {
 
 $apibase = 'https://lms-labs.com';
 
+/**
+ * Tell Client Portal (when installed) what LMS Labs charged for a call, so the site owner can bill the client.
+ *
+ * @param context|null $context
+ * @param mixed $reply decoded reply
+ * @param string $description
+ * @param string $ref job id, so a polled job is counted once
+ * @return void
+ */
+function learningmapping_report_usage($context, $reply, $description, $ref = '') {
+    global $USER;
+    if (method_exists('\\local_clientportal\\api', 'record_lmslabs_call')) {
+        $contextid = $context ? (int)$context->id : (int)context_system::instance()->id;
+        \local_clientportal\api::record_lmslabs_call((int)$USER->id, $contextid, 'mod_learningmapping', $reply, 0,
+            $description, (string)$ref);
+    }
+}
+
 switch ($action) {
 
     case 'getcredits':
@@ -137,6 +155,7 @@ switch ($action) {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
         if ($httpcode >= 200 && $httpcode < 300) {
             $result = json_decode($response, true);
+            learningmapping_report_usage($context, $result, 'Mapping analysis');
             if ($result && isset($result['ok']) && $result['ok']) {
                 echo json_encode($result);
             } else {
@@ -177,6 +196,7 @@ switch ($action) {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
         if ($httpcode >= 200 && $httpcode < 300) {
             $result = json_decode($response, true);
+            learningmapping_report_usage($context, $result, 'Mapping analysis');
             if ($result && isset($result['ok']) && $result['ok']) {
                 echo json_encode($result);
             } else {
@@ -227,6 +247,9 @@ switch ($action) {
         $curl = new curl();
         $curl->setopt(['CURLOPT_TIMEOUT' => 10]);
         $resp = json_decode($curl->get($apibase . '/api/jobs/' . urlencode($jobId)), true);
+        if (is_array($resp) && in_array($resp['status'] ?? '', ['done', 'complete', 'completed'], true)) {
+            learningmapping_report_usage($context, $resp, 'Mapping analysis', $jobId);
+        }
         echo json_encode($resp ?: ['ok' => false, 'status' => 'error', 'error' => 'Could not reach job status endpoint']);
         break;
 
@@ -265,6 +288,7 @@ switch ($action) {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
         if ($httpcode >= 200 && $httpcode < 300) {
             $result = json_decode($response, true);
+            learningmapping_report_usage($context, $result, 'Unit lookup');
             if ($result && isset($result['ok']) && $result['ok']) {
                 echo json_encode($result);
             } else {
@@ -307,6 +331,7 @@ switch ($action) {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
         if ($httpcode >= 200 && $httpcode < 300) {
             $result = json_decode($response, true);
+            learningmapping_report_usage($context, $result, 'Unit text clean-up');
             if ($result && isset($result['ok']) && $result['ok']) {
                 echo json_encode($result);
             } else {
