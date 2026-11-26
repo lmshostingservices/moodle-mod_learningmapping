@@ -73,6 +73,9 @@ if (empty($apikey)) {
 
 $apibase = 'https://lms-labs.com';
 
+// Bring your own AI: when this site's licence routes text to its own AI, analysis runs here instead of on LMS Labs.
+$byok = \mod_learningmapping\local\byok::enabled();
+
 /**
  * Tell Client Portal (when installed) what LMS Labs charged for a call, so the site owner can bill the client.
  *
@@ -84,6 +87,9 @@ $apibase = 'https://lms-labs.com';
  */
 function learningmapping_report_usage($context, $reply, $description, $ref = '') {
     global $USER;
+    if (is_array($reply) && !empty($reply['byok'])) {
+        return;
+    }
     if (method_exists('\\local_clientportal\\api', 'record_lmslabs_call')) {
         $contextid = $context ? (int)$context->id : (int)context_system::instance()->id;
         \local_clientportal\api::record_lmslabs_call((int)$USER->id, $contextid, 'mod_learningmapping', $reply, 0,
@@ -95,6 +101,10 @@ switch ($action) {
 
     case 'getcredits':
         require_capability('mod/learningmapping:manage', $context);
+        if ($byok) {
+            echo json_encode(['ok' => true, 'byok' => true, 'credits' => -1]);
+            break;
+        }
         if (strlen($siteid) === 0 || strlen($apikey) === 0) {
             echo json_encode([
                 'ok' => false,
@@ -128,7 +138,7 @@ switch ($action) {
 
     case 'analyzemapping':
         require_capability('mod/learningmapping:manage', $context);
-        if (strlen($siteid) === 0 || strlen($apikey) === 0) {
+        if (!$byok && (strlen($siteid) === 0 || strlen($apikey) === 0)) {
             echo json_encode(['ok' => false, 'error' => 'Plugin not configured: Missing Site ID or API Key.']);
             break;
         }
@@ -146,6 +156,11 @@ switch ($action) {
         \core\session\manager::write_close();
 
         $url = $apibase . '/api/generate-learningmapping';
+        $local = \mod_learningmapping\local\byok::handle($url, $payload);
+        if ($local !== null) {
+            echo json_encode($local);
+            break;
+        }
         $curl = new curl();
         $curl->setopt([
             'CURLOPT_TIMEOUT' => 150,
@@ -171,7 +186,7 @@ switch ($action) {
     // Analyse Assessment Conditions against scanned course activities.
     case 'analyseac':
         require_capability('mod/learningmapping:manage', $context);
-        if (strlen($siteid) === 0 || strlen($apikey) === 0) {
+        if (!$byok && (strlen($siteid) === 0 || strlen($apikey) === 0)) {
             echo json_encode(['ok' => false, 'error' => 'Plugin not configured: Missing Site ID or API Key.']);
             break;
         }
@@ -187,6 +202,11 @@ switch ($action) {
         \core\session\manager::write_close();
 
         $url = $apibase . '/api/analyse-assessment-conditions';
+        $local = \mod_learningmapping\local\byok::handle($url, $payload);
+        if ($local !== null) {
+            echo json_encode($local);
+            break;
+        }
         $curl = new curl();
         $curl->setopt([
             'CURLOPT_TIMEOUT' => 90,
@@ -213,7 +233,7 @@ switch ($action) {
     // JS polls case 'poll_job' every 3-4s until status=done.
     case 'analyzemapping_async':
         require_capability('mod/learningmapping:manage', $context);
-        if (strlen($siteid) === 0 || strlen($apikey) === 0) {
+        if (!$byok && (strlen($siteid) === 0 || strlen($apikey) === 0)) {
             echo json_encode(['ok' => false, 'error' => 'Plugin not configured: Missing Site ID or API Key.']);
             break;
         }
@@ -229,6 +249,11 @@ switch ($action) {
         \core\session\manager::write_close();
 
         $startUrl = $apibase . '/api/generate-learningmapping/start';
+        $local = \mod_learningmapping\local\byok::handle($startUrl, $payload);
+        if ($local !== null) {
+            echo json_encode($local);
+            break;
+        }
         $curl = new curl();
         $curl->setopt(['CURLOPT_TIMEOUT' => 15, 'CURLOPT_HTTPHEADER' => ['Content-Type: application/json']]);
         $resp = json_decode($curl->post($startUrl, json_encode($payload)), true);
@@ -244,6 +269,11 @@ switch ($action) {
     case 'poll_job':
         $jobId = required_param('jobId', PARAM_ALPHANUMEXT);
         \core\session\manager::write_close();
+        $local = \mod_learningmapping\local\byok::poll($jobId);
+        if ($local !== null) {
+            echo json_encode($local);
+            break;
+        }
         $curl = new curl();
         $curl->setopt(['CURLOPT_TIMEOUT' => 10]);
         $resp = json_decode($curl->get($apibase . '/api/jobs/' . urlencode($jobId)), true);
@@ -303,7 +333,7 @@ switch ($action) {
 
     case 'cleanpaste':
         require_capability('mod/learningmapping:manage', $context);
-        if (strlen($siteid) === 0 || strlen($apikey) === 0) {
+        if (!$byok && (strlen($siteid) === 0 || strlen($apikey) === 0)) {
             echo json_encode(['ok' => false, 'error' => 'Plugin not configured: Missing Site ID or API Key.']);
             break;
         }
@@ -322,6 +352,11 @@ switch ($action) {
         \core\session\manager::write_close();
 
         $url = $apibase . '/api/clean-tga-paste';
+        $local = \mod_learningmapping\local\byok::handle($url, $cleanPayload);
+        if ($local !== null) {
+            echo json_encode($local);
+            break;
+        }
         $curl = new curl();
         $curl->setopt([
             'CURLOPT_TIMEOUT' => 60,

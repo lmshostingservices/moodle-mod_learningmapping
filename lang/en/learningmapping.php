@@ -76,3 +76,7 @@ $string['privacy:metadata'] = 'The AI Mapping plugin stores mapping configuratio
 $string['privacy:metadata:learningmapping:course'] = 'The course ID.';
 $string['privacy:metadata:learningmapping:name'] = 'The mapping name.';
 $string['privacy:metadata:learningmapping:mappingdata'] = 'The mapping table data stored as JSON.';
+$string['byok_failed'] = 'Your AI provider could not run the analysis: {$a}';
+$string['byok_notavailable'] = 'Bring your own AI is on, but this site\'s AI is not ready. Check Site administration > Plugins > AI Grader Central Config > Bring your own AI.';
+$string['privacy:metadata:byok_aiprovider'] = 'When Bring your own AI is on, mapping rows, activity titles, questions and pasted unit text are sent to the AI provider this site has chosen, to suggest the mapping.';
+$string['privacy:metadata:byok_aiprovider:content'] = 'The mapping rows, course activity details and pasted unit text.';

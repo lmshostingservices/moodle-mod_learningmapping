@@ -1,6 +1,6 @@
 define(['jquery'], function($) {
     return {
-        init: function(mappingId, courseId, unitCode, savedDataStr, canManage, sesskey, framework) {
+        init: function(mappingId, courseId, unitCode, savedDataStr, canManage, sesskey, framework, byok) {
 
             var ajaxUrl = M.cfg.wwwroot + '/mod/learningmapping/ajax.php';
             var isVetFramework = !framework || framework === 'vet';
@@ -1144,7 +1144,7 @@ define(['jquery'], function($) {
                     html += '<span class="lm-ac-badge lm-ac-badge-pending">' + (acCount - metCount - partialCount - notMetCount) + ' Pending</span>';
                     html += '</div>';
                     if (canManage && lastScannedModules && lastScannedModules.length > 0) {
-                        html += '<button type="button" class="lm-btn lm-btn-ai-action lm-ac-analyse-btn" data-testid="button-analyse-ac-conditions" title="AI analyses scanned activities and fills How Addressed and Evidence columns (30 credits)">' + aiIcon + ' AI Analyse</button>';
+                        html += '<button type="button" class="lm-btn lm-btn-ai-action lm-ac-analyse-btn" data-testid="button-analyse-ac-conditions" title="AI analyses scanned activities and fills How Addressed and Evidence columns (' + (byok ? 'runs on your own AI' : '30 credits') + ')">' + aiIcon + ' AI Analyse</button>';
                     }
                     html += '</div>';
                 }
@@ -1462,7 +1462,8 @@ define(['jquery'], function($) {
                     html += '<div class="lm-step-header">';
                     html += '<span class="lm-step-number">4</span>';
                     html += '<span class="lm-step-title">AI Analyse</span>';
-                    html += '<span class="lm-step-badge">100 credits</span>';
+                    html += byok ? '<span class="lm-step-badge lm-step-badge-ownai"><i class="fa fa-key" aria-hidden="true"></i> Your own AI</span>'
+                        : '<span class="lm-step-badge">100 credits</span>';
                     html += '</div>';
                     html += '<div class="lm-step-body">';
                     html += '<p class="lm-step-desc">AI maps scanned activities to your ' + (isVetFramework ? 'TGA rows' : 'outcome rows') + '. Only empty cells are filled; existing entries are preserved.</p>';
@@ -1879,6 +1880,14 @@ define(['jquery'], function($) {
                         timeout: 15000,
                         success: function(resp) {
                             resetBtn();
+                            if (resp && resp.ok && resp.byok) {
+                                showConfirm('AI Analyse will run on your own AI. No LMS Labs credits are used.\n\nOnly empty cells will be filled  -  existing entries are preserved.', {
+                                    title: 'Run AI Analysis',
+                                    confirmText: 'Analyse',
+                                    type: 'default'
+                                }).then(function(ok) { if (ok) startAnalysis(); });
+                                return;
+                            }
                             if (resp && resp.ok) {
                                 var bal = resp.credits;
                                 var balDisplay = (bal === -1) ? 'Unlimited' : bal;
