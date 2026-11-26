@@ -60,7 +60,7 @@ final class byok_test extends \advanced_testcase {
         set_config('testpublickey', base64_encode(sodium_crypto_sign_publickey($pair)), 'local_aiconfig');
         $payload = json_encode(['v' => 1, 'id' => 'lic_t', 'site' => \local_aiconfig\byok\licence::site_host(),
             'plan' => 'pro', 'byok' => true, 'products' => ['*'], 'sub' => 'sub_t', 'exp' => time() + DAYSECS]);
-        $b64 = function(string $s): string {
+        $b64 = function (string $s): string {
             return rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
         };
         set_config('licencekey', $b64($payload) . '.' .
@@ -85,7 +85,7 @@ final class byok_test extends \advanced_testcase {
      */
     protected function answer(?string $answer): void {
         $this->requests = [];
-        $GLOBALS['local_aiconfig_byok_mock'] = function($url, $headers, $body) use ($answer) {
+        $GLOBALS['local_aiconfig_byok_mock'] = function ($url, $headers, $body) use ($answer) {
             $this->requests[] = $body;
             if ($answer === null) {
                 throw new \moodle_exception('byok_providererror', 'local_aiconfig', '', 'Overloaded');
@@ -142,9 +142,13 @@ final class byok_test extends \advanced_testcase {
     public function test_assessment_conditions_and_clean_paste(): void {
         $this->answer('{"results":[{"id":"ac1","addressed":"Simulated workplace.","evidence":"PA","status":"met"}]}');
         $out = byok::handle('https://lms-labs.com/api/analyse-assessment-conditions', ['unitCode' => 'HLTWHS001',
-            'acData' => [['id' => 'ac1', 'text' => 'Simulated workplace']], 'scannedModules' => self::PAYLOAD['scannedModules']]);
+            'acData' => [['id' => 'ac1', 'text' => 'Simulated workplace']], 'scannedModules' =>
+                self::PAYLOAD['scannedModules']]);
         $this->assertSame('met', $out['results'][0]['status']);
-        $this->assertStringContainsString('1. [ID:ac1] Simulated workplace', $this->requests[0]['messages'][0]['content'][0]['text']);
+        $this->assertStringContainsString(
+            '1. [ID:ac1] Simulated workplace',
+            $this->requests[0]['messages'][0]['content'][0]['text']
+        );
         $this->answer("  Elements and Performance Criteria\n1. Isolate plant  ");
         $out = byok::handle('https://lms-labs.com/api/clean-tga-paste', ['rawText' => 'NRT Home News 1. Isolate plant']);
         $this->assertSame("Elements and Performance Criteria\n1. Isolate plant", $out['cleanedText']);

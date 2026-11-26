@@ -1144,7 +1144,13 @@ define(['jquery'], function($) {
                     html += '<span class="lm-ac-badge lm-ac-badge-pending">' + (acCount - metCount - partialCount - notMetCount) + ' Pending</span>';
                     html += '</div>';
                     if (canManage && lastScannedModules && lastScannedModules.length > 0) {
-                        html += '<button type="button" class="lm-btn lm-btn-ai-action lm-ac-analyse-btn" data-testid="button-analyse-ac-conditions" title="AI analyses scanned activities and fills How Addressed and Evidence columns (' + (byok ? 'runs on your own AI' : '30 credits') + ')">' + aiIcon + ' AI Analyse</button>';
+                        var acCost = byok ? 'runs on your own AI' : '30 credits';
+                        var acIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"' +
+                            ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                            '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+                        html += '<button type="button" class="lm-btn lm-btn-ai-action lm-ac-analyse-btn"' +
+                            ' data-testid="button-analyse-ac-conditions" title="AI analyses scanned activities and fills' +
+                            ' How Addressed and Evidence columns (' + acCost + ')">' + acIcon + ' AI Analyse</button>';
                     }
                     html += '</div>';
                 }
@@ -1462,7 +1468,9 @@ define(['jquery'], function($) {
                     html += '<div class="lm-step-header">';
                     html += '<span class="lm-step-number">4</span>';
                     html += '<span class="lm-step-title">AI Analyse</span>';
-                    html += byok ? '<span class="lm-step-badge lm-step-badge-ownai"><i class="fa fa-key" aria-hidden="true"></i> Your own AI</span>'
+                    html += byok
+                        ? '<span class="lm-step-badge lm-step-badge-ownai"><i class="fa fa-key" aria-hidden="true"></i>' +
+                            ' Your own AI</span>'
                         : '<span class="lm-step-badge">100 credits</span>';
                     html += '</div>';
                     html += '<div class="lm-step-body">';
@@ -1856,6 +1864,27 @@ define(['jquery'], function($) {
                         });
                     }
 
+                    /**
+                     * Ask to run the analysis on the site's own AI (no LMS Labs credits are used).
+                     *
+                     * @returns {Promise}
+                     */
+                    function confirmOwnAi() {
+                        return showConfirm('AI Analyse will run on your own AI. No LMS Labs credits are used.\n\n' +
+                            'Only empty cells will be filled  -  existing entries are preserved.', {
+                            title: 'Run AI Analysis',
+                            confirmText: 'Analyse',
+                            type: 'default'
+                        }).then(function(ok) {
+                            if (ok) {
+                                startAnalysis();
+                            }
+                            return ok;
+                        }).catch(function() {
+                            return false;
+                        });
+                    }
+
                     function startAnalysis() {
                         btn.disabled = true;
                         btn.innerHTML = '<span class="lm-spinner"></span> Analysing...';
@@ -1881,11 +1910,7 @@ define(['jquery'], function($) {
                         success: function(resp) {
                             resetBtn();
                             if (resp && resp.ok && resp.byok) {
-                                showConfirm('AI Analyse will run on your own AI. No LMS Labs credits are used.\n\nOnly empty cells will be filled  -  existing entries are preserved.', {
-                                    title: 'Run AI Analysis',
-                                    confirmText: 'Analyse',
-                                    type: 'default'
-                                }).then(function(ok) { if (ok) startAnalysis(); });
+                                confirmOwnAi();
                                 return;
                             }
                             if (resp && resp.ok) {

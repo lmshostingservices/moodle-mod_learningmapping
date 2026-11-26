@@ -111,8 +111,13 @@ class byok {
      * @return \cache
      */
     private static function jobs(): \cache {
-        return \cache::make_from_params(\cache_store::MODE_APPLICATION, 'mod_learningmapping', 'byokjobs', [],
-            ['simplekeys' => true, 'simpledata' => false, 'ttl' => HOURSECS]);
+        return \cache::make_from_params(
+            \cache_store::MODE_APPLICATION,
+            'mod_learningmapping',
+            'byokjobs',
+            [],
+            ['simplekeys' => true, 'simpledata' => false, 'ttl' => HOURSECS]
+        );
     }
 
     /**
@@ -125,7 +130,9 @@ class byok {
         if (!is_string($p['rawText'] ?? null) || self::js_len($p['rawText']) < 10) {
             return ['ok' => false, 'error' => 'Invalid request'];
         }
-        $systemPrompt = ('You are an expert at parsing Australian VET training package units of competency from training.gov.au. Your job is to take raw pasted text (which may include website navigation, headers, footers, Power BI notices, and other junk) and extract ONLY the structured unit content in a clean, simple format.
+        $systemprompt = ('You are an expert at parsing Australian VET training package units of competency from ' .
+            'training.gov.au. Your job is to take raw pasted text (which may include website navigation, headers, footers, ' .
+            'Power BI notices, and other junk) and extract ONLY the structured unit content in a clean, simple format.
 
 OUTPUT FORMAT — follow this EXACTLY:
 Elements and Performance Criteria
@@ -154,23 +161,25 @@ Assessment Conditions
 ...
 
 RULES:
-1. Strip ALL website junk: navigation, Power BI notices, search bars, "NRT Home News", release history, dates, "arrow_upward", "Back to top", copyright, privacy, acknowledgement, site version, etc.
+1. Strip ALL website junk: navigation, Power BI notices, search bars, "NRT Home News", release history, dates, ' .
+            '"arrow_upward", "Back to top", copyright, privacy, acknowledgement, site version, etc.
 2. Simplify element titles to be concise (e.g. "Plan financial management approaches" → "Plan Financial Management")
-3. Simplify PC text to be concise but preserve meaning (e.g. "Access budget and financial plans for work team" → "Access budgets and financial plans")
+3. Simplify PC text to be concise but preserve meaning (e.g. "Access budget and financial plans for work team" → "Access ' .
+            'budgets and financial plans")
 4. Keep Foundation Skills grouped by skill name with descriptions
 5. Remove boilerplate preamble text like "The candidate must be able to demonstrate..." and "This section describes..."
 6. Remove "Element Performance criteria" table headers
 7. Remove release/modification history
 8. Keep the content accurate — don\'t invent or add requirements that aren\'t in the source
 9. Output ONLY the structured text, no markdown formatting, no code blocks, no explanations');
-        $userPrompt = "Clean and structure this raw TGA unit paste into the simplified format:\n\n"
+        $userprompt = "Clean and structure this raw TGA unit paste into the simplified format:\n\n"
             . self::js_slice($p['rawText'], 0, 15000);
         try {
-            $responseText = self::ai($systemPrompt, $userPrompt, 4000, 0.1, false);
+            $responsetext = self::ai($systemprompt, $userprompt, 4000, 0.1, false);
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => self::message($e)];
         }
-        return ['ok' => true, 'cleanedText' => self::js_trim($responseText)];
+        return ['ok' => true, 'cleanedText' => self::js_trim($responsetext)];
     }
 
     /**
@@ -185,57 +194,57 @@ RULES:
             return ['ok' => false, 'error' => 'Validation error: ' . $invalid];
         }
         try {
-            [$systemPrompt, $userPrompt, $isVetFramework] = self::mapping_prompts($p);
-            $responseText = self::ai($systemPrompt, $userPrompt, 12000, 0.3, true);
+            [$systemprompt, $userprompt, $isvetframework] = self::mapping_prompts($p);
+            $responsetext = self::ai($systemprompt, $userprompt, 12000, 0.3, true);
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => self::message($e)];
         }
         // Decoded as objects so {} and [] in the AI's answer come back exactly as the service returns them.
-        $parsed = json_decode($responseText);
+        $parsed = json_decode($responsetext);
         if (json_last_error() !== JSON_ERROR_NONE) {
             return ['ok' => false, 'error' => 'Failed to parse AI response'];
         }
         if (!is_object($parsed) || !isset($parsed->mappings) || !is_array($parsed->mappings)) {
             return ['ok' => false, 'error' => 'AI response missing mappings array'];
         }
-        $isobj = function($v) {
+        $isobj = function ($v) {
             return is_object($v) || is_array($v);
         };
-        if (!$isVetFramework) {
-            $coverageValues = ['introduced', 'practised', 'assessed'];
+        if (!$isvetframework) {
+            $coveragevalues = ['introduced', 'practised', 'assessed'];
             foreach ($parsed->mappings as $mapping) {
                 if (!is_object($mapping) || !isset($mapping->suggestions) || !$isobj($mapping->suggestions)) {
                     return ['ok' => false, 'error' => 'AI response contains an invalid outcome mapping'];
                 }
-                $coverageTypes = $mapping->coverageTypes ?? null;
-                if (!is_object($coverageTypes)) {
+                $coveragetypes = $mapping->coverageTypes ?? null;
+                if (!is_object($coveragetypes)) {
                     return ['ok' => false, 'error' => 'AI response omitted coverage types for non-VET mapping'];
                 }
-                $cleanCoverage = new \stdClass();
-                foreach ((array) $mapping->suggestions as $columnId => $suggestion) {
+                $cleancoverage = new \stdClass();
+                foreach ((array) $mapping->suggestions as $columnid => $suggestion) {
                     if (!is_string($suggestion) || self::js_trim($suggestion) === '') {
                         continue;
                     }
-                    $coverage = ((array) $coverageTypes)[$columnId] ?? null;
-                    if (!is_string($coverage) || !in_array($coverage, $coverageValues, true)) {
+                    $coverage = ((array) $coveragetypes)[$columnid] ?? null;
+                    if (!is_string($coverage) || !in_array($coverage, $coveragevalues, true)) {
                         return ['ok' => false, 'error' => 'AI response contains an invalid outcome coverage type'];
                     }
-                    $cleanCoverage->{$columnId} = $coverage;
+                    $cleancoverage->{$columnid} = $coverage;
                 }
-                $mapping->coverageTypes = $cleanCoverage;
+                $mapping->coverageTypes = $cleancoverage;
             }
         }
         foreach ($parsed->mappings as $m) {
             if (is_object($m) && isset($m->suggestions) && is_object($m->suggestions)) {
-                foreach ($m->suggestions as $colId => $val) {
+                foreach ($m->suggestions as $colid => $val) {
                     if (self::js_truthy($val)) {
-                        $m->suggestions->{$colId} = self::sanitise_cell($val);
+                        $m->suggestions->{$colid} = self::sanitise_cell($val);
                     }
                 }
             } else if (is_object($m) && isset($m->suggestions) && is_array($m->suggestions)) {
-                foreach ($m->suggestions as $colId => $val) {
+                foreach ($m->suggestions as $colid => $val) {
                     if (self::js_truthy($val)) {
-                        $m->suggestions[$colId] = self::sanitise_cell($val);
+                        $m->suggestions[$colid] = self::sanitise_cell($val);
                     }
                 }
             }
@@ -292,92 +301,117 @@ RULES:
     public static function mapping_prompts(array $p): array {
         $rows = $p['rows'];
         $columns = $p['columns'];
-        $scannedModules = $p['scannedModules'] ?? null;
-        $unitCode = $p['unitCode'] ?? null;
+        $scannedmodules = $p['scannedModules'] ?? null;
+        $unitcode = $p['unitCode'] ?? null;
         $framework = array_key_exists('framework', $p) ? $p['framework'] : 'vet';
-        $selectedFramework = in_array($framework, self::FRAMEWORKS, true) ? $framework : 'vet';
-        $isVetFramework = $selectedFramework === 'vet';
-        $selectedFrameworkData = self::parse_framework_data(array_key_exists('frameworkdata', $p) ? $p['frameworkdata'] : []);
+        $selectedframework = in_array($framework, self::FRAMEWORKS, true) ? $framework : 'vet';
+        $isvetframework = $selectedframework === 'vet';
+        $selectedframeworkdata = self::parse_framework_data(array_key_exists('frameworkdata', $p) ? $p['frameworkdata'] : []);
         $cells = (isset($p['cells']) && is_array($p['cells']) && !(self::is_list($p['cells']) && $p['cells'] !== []))
             ? $p['cells'] : [];
-        $cell = function($key) use ($cells) {
+        $cell = function ($key) use ($cells) {
             return array_key_exists($key, $cells) ? $cells[$key] : null;
         };
         $col0 = isset($columns[0]) ? self::js_str($columns[0]['id']) : 'undefined';
 
-        $parentMap = [];
+        $parentmap = [];
         foreach ($rows as $r) {
             if (self::js_truthy($r['isElement'] ?? null) || self::js_truthy($r['isShaded'] ?? null)) {
-                $parentMap[$r['id']] = self::js_or($r['title'], '');
+                $parentmap[$r['id']] = self::js_or($r['title'], '');
             }
         }
-        $rowSummary = '';
+        $rowsummary = '';
         foreach ($rows as $r) {
             if (self::js_truthy($r['isElement'] ?? null) || self::js_truthy($r['isShaded'] ?? null)) {
                 continue;
             }
-            $firstColVal = self::js_or(self::js_or($cell($r['id'] . '::' . $col0), $r['title']), '');
-            $parentInfo = '';
+            $firstcolval = self::js_or(self::js_or($cell($r['id'] . '::' . $col0), $r['title']), '');
+            $parentinfo = '';
             $pid = $r['parentId'] ?? null;
-            if (self::js_truthy($pid) && self::js_truthy($parentMap[$pid] ?? null)) {
-                $parentInfo = ' (under: "' . self::js_str($parentMap[$pid]) . '")';
+            if (self::js_truthy($pid) && self::js_truthy($parentmap[$pid] ?? null)) {
+                $parentinfo = ' (under: "' . self::js_str($parentmap[$pid]) . '")';
             }
-            $rowSummary .= '[ROW] id="' . $r['id'] . '" ' . self::js_str($firstColVal) . $parentInfo . "\n";
+            $rowsummary .= '[ROW] id="' . $r['id'] . '" ' . self::js_str($firstcolval) . $parentinfo . "\n";
         }
 
-        $activitySummary = '';
-        if (is_array($scannedModules) && count($scannedModules) > 0) {
-            foreach ($scannedModules as $mod) {
-                $activitySummary .= self::mapping_module($mod, $isVetFramework);
+        $activitysummary = '';
+        if (is_array($scannedmodules) && count($scannedmodules) > 0) {
+            foreach ($scannedmodules as $mod) {
+                $activitysummary .= self::mapping_module($mod, $isvetframework);
             }
         }
 
-        $mappableColumns = array_values(array_filter($columns, function($c) {
+        $mappablecolumns = array_values(array_filter($columns, function ($c) {
             return $c['id'] !== 'col_elements';
         }));
-        $existingMappings = '';
+        $existingmappings = '';
         foreach ($rows as $r) {
-            foreach ($mappableColumns as $col) {
+            foreach ($mappablecolumns as $col) {
                 $val = $cell($r['id'] . '::' . $col['id']);
                 if (self::js_truthy($val) && self::js_trim($val) !== '') {
-                    $rowLabel = self::js_or(self::js_or($cell($r['id'] . '::' . $col0), $r['title']), $r['id']);
-                    $existingMappings .= '  Row "' . self::js_str($rowLabel) . '" → Column "' . $col['title'] . '": '
+                    $rowlabel = self::js_or(self::js_or($cell($r['id'] . '::' . $col0), $r['title']), $r['id']);
+                    $existingmappings .= '  Row "' . self::js_str($rowlabel) . '" → Column "' . $col['title'] . '": '
                         . self::js_slice($val, 0, 200) . "\n";
                 }
             }
         }
 
-        $systemPrompt = ('You are an expert VET/RTO training package analyst specialising in ASQA-compliant learning and assessment mapping for Australian Registered Training Organisations.
+        $systemprompt = ('You are an expert VET/RTO training package analyst specialising in ASQA-compliant learning and ' .
+            'assessment mapping for Australian Registered Training Organisations.
 
 ⚠️ ABSOLUTE NON-NEGOTIABLE RULE — READ THIS FIRST AND OBEY AT ALL TIMES:
 Every cell value in your suggestions MUST be a SHORT CODE ONLY.
 CORRECT: "T1"  "Q1, Q3"  "Act 1"  "T2, T4"  "Q1"
-WRONG:   "Learning Element 1: Plan financial..."  "Quiz Priya\'s team is proposing..."  "(cardselect) Budget..."  Any sentence. Any description. Any question text. Any title.
+WRONG:   "Learning Element 1: Plan financial..."  "Quiz Priya\'s team is proposing..."  "(cardselect) Budget..."  Any ' .
+            'sentence. Any description. Any question text. Any title.
 If you put anything other than short codes in a cell, the mapping is broken. Short codes only. No exceptions.
 
-Your task: Given the unit elements/performance criteria (rows) and ALL course activities found by scanning the Moodle course (Content Creator slideshows, Learning Activities, Knowledge Check questions, Essay Maker questions, Moodle Assignments, Quizzes, Lessons, Books, Pages, Forums, Workshops, and any other activities), produce an intelligent mapping that shows which activities address which performance criteria.
+Your task: Given the unit elements/performance criteria (rows) and ALL course activities found by scanning the Moodle course ' .
+            '(Content Creator slideshows, Learning Activities, Knowledge Check questions, Essay Maker questions, Moodle ' .
+            'Assignments, Quizzes, Lessons, Books, Pages, Forums, Workshops, and any other activities), produce an ' .
+            'intelligent mapping that shows which activities address which performance criteria.
 
 ACTIVITY TYPE GUIDE:
-- contentcreator: AI-generated learning slideshows with topics and sections — maps to Content Creator column (LEARNING group). Topics are numbered T1, T2, T3 etc. in order. When mapping, use the topic NUMBER to indicate which PC a topic covers. For example, if T1\'s title relates to "accessing budgets", map T1 to the PC row about accessing budgets.
-- aiactivities: Interactive learning activities — maps to Learning Activities column (LEARNING group). Activities are numbered Act 1, Act 2, Act 3 etc. in order. Map each activity to the PC it addresses based on its title/type.
-- aiknowledgecheck: Knowledge check questions — maps to Knowledge Check column (ASSESSMENT group). Questions are numbered Q1, Q2, Q3 etc. in order. CRITICAL: Each question may have a [maps-to-criteria] tag showing which PC it was designed for, and/or a [maps-to-topic] tag. Use these tags as the PRIMARY basis for mapping KC questions to rows. If Q5 has [maps-to-criteria: 1.1], it MUST map to the row for PC 1.1. If no criteria tag exists, match by question content.
-- essaymaker: Written assessment questions — maps to Essay Maker column (ASSESSMENT group). Questions are numbered Q1, Q2, Q3 etc. in order.
-- practicalassessment: AI-generated workplace practical assessment — maps to Practical Assessment column (ASSESSMENT group). This is the richest source of mapping data. It contains:
-  • OBSERVABLE SKILLS: each is a directly observable performance behaviour mapped to specific elements. These are the strongest evidence for Performance Evidence rows and Performance Criteria.
-  • WORKPLACE FORMS: documentary evidence required (e.g. Hazard Report, Risk Assessment Form, Work Record). These satisfy Assessment Conditions requirements and Performance Evidence rows requiring documentation.
-  • PRE-MAPPED CRITERIA: pre-existing mappings between criteria and evidence. Treat these as authoritative: if criterion "1.1 - Access budget plans" is pre-mapped to a skill, that skill maps to the PC 1.1 row.
+- contentcreator: AI-generated learning slideshows with topics and sections — maps to Content Creator column (LEARNING ' .
+            'group). Topics are numbered T1, T2, T3 etc. in order. When mapping, use the topic NUMBER to indicate which PC a ' .
+            'topic covers. For example, if T1\'s title relates to "accessing budgets", map T1 to the PC row about accessing ' .
+            'budgets.
+- aiactivities: Interactive learning activities — maps to Learning Activities column (LEARNING group). Activities are ' .
+            'numbered Act 1, Act 2, Act 3 etc. in order. Map each activity to the PC it addresses based on its title/type.
+- aiknowledgecheck: Knowledge check questions — maps to Knowledge Check column (ASSESSMENT group). Questions are numbered ' .
+            'Q1, Q2, Q3 etc. in order. CRITICAL: Each question may have a [maps-to-criteria] tag showing which PC it was ' .
+            'designed for, and/or a [maps-to-topic] tag. Use these tags as the PRIMARY basis for mapping KC questions to ' .
+            'rows. If Q5 has [maps-to-criteria: 1.1], it MUST map to the row for PC 1.1. If no criteria tag exists, match by ' .
+            'question content.
+- essaymaker: Written assessment questions — maps to Essay Maker column (ASSESSMENT group). Questions are numbered Q1, Q2, ' .
+            'Q3 etc. in order.
+- practicalassessment: AI-generated workplace practical assessment — maps to Practical Assessment column (ASSESSMENT ' .
+            'group). This is the richest source of mapping data. It contains:
+  • OBSERVABLE SKILLS: each is a directly observable performance behaviour mapped to specific elements. These are the ' .
+            'strongest evidence for Performance Evidence rows and Performance Criteria.
+  • WORKPLACE FORMS: documentary evidence required (e.g. Hazard Report, Risk Assessment Form, Work Record). These satisfy ' .
+            'Assessment Conditions requirements and Performance Evidence rows requiring documentation.
+  • PRE-MAPPED CRITERIA: pre-existing mappings between criteria and evidence. Treat these as authoritative: if criterion ' .
+            '"1.1 - Access budget plans" is pre-mapped to a skill, that skill maps to the PC 1.1 row.
   • SCENARIO: the workplace context — use this to confirm which industry/job role the skills apply to.
-  No numbered short codes apply here. For Practical Assessment column cells, use "PA" (just "PA" — the practical assessment activity as a whole is the evidence).
-- assign: Moodle assignment (practical/written submission) — maps to Assignments column (ASSESSMENT group). The description tells you what the assignment covers. Use "AS" as the short code.
-- quiz: Moodle quiz with questions. IMPORTANT: Quiz questions have a "type" field. Questions with type "essay" are written/short-answer assessment questions and MUST map to the Essay Maker column. Questions with other types (multichoice, truefalse, match, shortanswer, etc.) map to Knowledge Check column. A single quiz may have questions that map to BOTH columns.
+  No numbered short codes apply here. For Practical Assessment column cells, use "PA" (just "PA" — the practical ' .
+            'assessment activity as a whole is the evidence).
+- assign: Moodle assignment (practical/written submission) — maps to Assignments column (ASSESSMENT group). The ' .
+            'description tells you what the assignment covers. Use "AS" as the short code.
+- quiz: Moodle quiz with questions. IMPORTANT: Quiz questions have a "type" field. Questions with type "essay" are ' .
+            'written/short-answer assessment questions and MUST map to the Essay Maker column. Questions with other types ' .
+            '(multichoice, truefalse, match, shortanswer, etc.) map to Knowledge Check column. A single quiz may have ' .
+            'questions that map to BOTH columns.
 - lesson: Moodle lesson with sequential pages — maps to Learning Activities column (LEARNING group)
 - book: Moodle book with chapters — maps to Content Creator column (LEARNING group)
 - page: Single content page — maps to Content Creator column (LEARNING group)
-- forum: Discussion forum — maps to Essay Maker column (ASSESSMENT group) if used for written responses, or Learning Activities column if used for discussion-based learning
+- forum: Discussion forum — maps to Essay Maker column (ASSESSMENT group) if used for written responses, or Learning ' .
+            'Activities column if used for discussion-based learning
 - workshop: Peer assessment workshop — maps to Essay Maker column (ASSESSMENT group)
 - resource/url/scorm/lti/h5pactivity: Other learning resources — maps to Learning Activities column (LEARNING group)
 
-COLUMN MAPPING — The exact column IDs are provided in the user prompt under "COLUMNS AVAILABLE FOR MAPPING". Use those exact IDs in your suggestions object. The column title tells you what type of activity maps there:
+COLUMN MAPPING — The exact column IDs are provided in the user prompt under "COLUMNS AVAILABLE FOR MAPPING". Use those ' .
+            'exact IDs in your suggestions object. The column title tells you what type of activity maps there:
 - Columns titled "Content Creator" or similar: learning slideshows, books, pages. Cell value = T1, T2, T3 etc.
 - Columns titled "Learning Activities" or similar: interactive activities, lessons. Cell value = Act 1, Act 2, Act 3 etc.
 - Columns titled "Knowledge Check" or similar: multichoice/knowledge questions. Cell value = Q1, Q2, Q3 etc.
@@ -388,15 +422,28 @@ COLUMN MAPPING — The exact column IDs are provided in the user prompt under "C
 ALWAYS use the col_id from the "COLUMNS AVAILABLE FOR MAPPING" list — never invent column IDs.
 
 ROW TYPES IN THE MAPPING TABLE:
-The rows are organised into sections. Each section has a heading row (marked [ELEMENT-HEADING] or [SECTION-HEADING]) followed by child rows (marked [ROW]). The child rows have "(under: ...)" to show which heading they belong to. Row types:
+The rows are organised into sections. Each section has a heading row (marked [ELEMENT-HEADING] or [SECTION-HEADING]) ' .
+            'followed by child rows (marked [ROW]). The child rows have "(under: ...)" to show which heading they belong to. ' .
+            'Row types:
 
-1. PERFORMANCE CRITERIA rows (under Element headings): These are specific performance criteria like "1.1 Access budget and financial plans". Map Content Creator topics, Learning Activities, Knowledge Check questions, and Essay Maker questions that address this specific criterion. Use the Content Creator topic that teaches this criterion, the KC question that tests it, etc.
+1. PERFORMANCE CRITERIA rows (under Element headings): These are specific performance criteria like "1.1 Access budget and ' .
+            'financial plans". Map Content Creator topics, Learning Activities, Knowledge Check questions, and Essay Maker ' .
+            'questions that address this specific criterion. Use the Content Creator topic that teaches this criterion, the ' .
+            'KC question that tests it, etc.
 
-2. KNOWLEDGE EVIDENCE rows (under "Knowledge Evidence" heading): These list knowledge requirements like "basic accounting principles". Map KC questions AND Essay Maker questions that test this knowledge. Also map Content Creator topics that teach this knowledge, and Learning Activities that cover it. KE rows should have MORE mappings than PC rows because multiple activities often address the same knowledge area.
+2. KNOWLEDGE EVIDENCE rows (under "Knowledge Evidence" heading): These list knowledge requirements like "basic accounting ' .
+            'principles". Map KC questions AND Essay Maker questions that test this knowledge. Also map Content Creator ' .
+            'topics that teach this knowledge, and Learning Activities that cover it. KE rows should have MORE mappings than ' .
+            'PC rows because multiple activities often address the same knowledge area.
 
-3. PERFORMANCE EVIDENCE rows (under "Performance Evidence" heading): These list practical competency requirements. The OBSERVABLE SKILLS in a Practical Assessment activity are the STRONGEST evidence for Performance Evidence rows — match each skill to the PE requirement it satisfies. Also map Essay Maker questions, assignments, and Learning Activities where students demonstrate these practical skills. KC questions may also map here if they assess related applied knowledge.
+3. PERFORMANCE EVIDENCE rows (under "Performance Evidence" heading): These list practical competency requirements. The ' .
+            'OBSERVABLE SKILLS in a Practical Assessment activity are the STRONGEST evidence for Performance Evidence rows ' .
+            '— match each skill to the PE requirement it satisfies. Also map Essay Maker questions, assignments, and ' .
+            'Learning Activities where students demonstrate these practical skills. KC questions may also map here if they ' .
+            'assess related applied knowledge.
 
-4. FOUNDATION SKILLS rows (under "Foundation Skills" heading): These are cross-cutting skills like Numeracy, Oral Communication, Reading, Writing, Teamwork, etc. THESE MUST NOT BE LEFT BLANK. Map them as follows:
+4. FOUNDATION SKILLS rows (under "Foundation Skills" heading): These are cross-cutting skills like Numeracy, Oral ' .
+            'Communication, Reading, Writing, Teamwork, etc. THESE MUST NOT BE LEFT BLANK. Map them as follows:
    - Numeracy: Any activity involving calculations, budgets, financial data, spreadsheets, numerical analysis
    - Oral communication: Any forum discussions, presentation activities, group activities requiring verbal interaction
    - Reading: Any activity requiring students to read and interpret documents, policies, financial statements
@@ -409,7 +456,8 @@ The rows are organised into sections. Each section has a heading row (marked [EL
 
 RULES:
 1. Return valid JSON only. No commentary outside JSON.
-2. ONLY produce mappings for [ROW] rows. NEVER produce mappings for [ELEMENT-HEADING] or [SECTION-HEADING] rows — these are group headers and must NOT have cell content. Skip them entirely in the mappings array.
+2. ONLY produce mappings for [ROW] rows. NEVER produce mappings for [ELEMENT-HEADING] or [SECTION-HEADING] rows — these ' .
+            'are group headers and must NOT have cell content. Skip them entirely in the mappings array.
 3. CRITICAL — Cell values must be SHORT CODES ONLY, not full text. Examples of CORRECT cell values:
    - "T1" or "T1, T3" (Content Creator topic numbers)
    - "Q1" or "Q1, Q3, Q5" (quiz/knowledge check/essay question numbers)
@@ -421,15 +469,24 @@ RULES:
    - "Budget Management Concepts (flashcards) Budget Terms and Definitions (matching)..."
    - Any text longer than 20 characters
    NEVER put full activity names, descriptions, question text, or long text in cells. Maximum ~20 characters per cell.
-4. Each [ROW] represents ONE specific requirement. Map activities that specifically address THAT requirement. Be thorough — if a topic covers budgets and a PC row is about budgets, map it. If a KC question tests budget knowledge and a KE row lists budget knowledge, map it.
+4. Each [ROW] represents ONE specific requirement. Map activities that specifically address THAT requirement. Be thorough ' .
+            '— if a topic covers budgets and a PC row is about budgets, map it. If a KC question tests budget knowledge ' .
+            'and a KE row lists budget knowledge, map it.
 5. If a row has no matching activity, omit it from mappings or leave its suggestions empty. Do not put "N/A" or "None".
 6. Identify gaps where no course activity addresses a requirement.
-7. Map EVERY scanned module type — not just AI plugins. Standard Moodle activities (assignments, quizzes, lessons, books, forums, etc.) are equally important.
-8. Use the column group to determine where to place suggestions: learning-group columns for learning resources, assessment-group columns for assessment activities.
-9. NUMBERING: Activities in the scanned data are already labelled with their short codes (T1, Q1, Act 1 etc.). Use those exact codes in your cell values. The number corresponds to the order they appear in the scan.
-10. KNOWLEDGE CHECK MAPPING: When a KC question has [maps-to-criteria: X.X], that question MUST appear in the Knowledge Check column for the PC row with code X.X. This is the most reliable mapping signal available — treat it as authoritative. Also map the same question to any KE row whose knowledge requirement the question tests.
-11. FOUNDATION SKILLS: Every FS child row MUST have at least one mapping. These are cross-cutting skills — multiple activities across all columns typically address each one. Be generous with FS mappings.
-12. KNOWLEDGE/PERFORMANCE EVIDENCE: KE and PE rows typically have MANY mappings because they summarise broad knowledge/skill areas. Map generously — any activity that touches the knowledge area or skill should be included.
+7. Map EVERY scanned module type — not just AI plugins. Standard Moodle activities (assignments, quizzes, lessons, books, ' .
+            'forums, etc.) are equally important.
+8. Use the column group to determine where to place suggestions: learning-group columns for learning resources, ' .
+            'assessment-group columns for assessment activities.
+9. NUMBERING: Activities in the scanned data are already labelled with their short codes (T1, Q1, Act 1 etc.). Use those ' .
+            'exact codes in your cell values. The number corresponds to the order they appear in the scan.
+10. KNOWLEDGE CHECK MAPPING: When a KC question has [maps-to-criteria: X.X], that question MUST appear in the Knowledge ' .
+            'Check column for the PC row with code X.X. This is the most reliable mapping signal available — treat it as ' .
+            'authoritative. Also map the same question to any KE row whose knowledge requirement the question tests.
+11. FOUNDATION SKILLS: Every FS child row MUST have at least one mapping. These are cross-cutting skills — multiple ' .
+            'activities across all columns typically address each one. Be generous with FS mappings.
+12. KNOWLEDGE/PERFORMANCE EVIDENCE: KE and PE rows typically have MANY mappings because they summarise broad knowledge/skill ' .
+            'areas. Map generously — any activity that touches the knowledge area or skill should be included.
 13. Output format must be a compact JSON object with:
    {
      "mappings": [
@@ -449,44 +506,63 @@ RULES:
        "recommendations": ["max 3 key recommendations"]
      }
    }
-   IMPORTANT FOR COMPACT OUTPUT: omit rowTitle and confidence from every mapping entry. Only include "gaps" when there is a real gap. This keeps the response small so it completes without timeout.
+   IMPORTANT FOR COMPACT OUTPUT: omit rowTitle and confidence from every mapping entry. Only include "gaps" when there is a ' .
+            'real gap. This keeps the response small so it completes without timeout.
 
 ⚠️ FINAL REMINDER — CELL VALUES ARE SHORT CODES ONLY:
 "T1" ✓   "Q1, Q3" ✓   "Act 1" ✓   "T2, T4" ✓
 "Budget management approaches" ✗   "Q1: What should Priya do?" ✗   "(cardselect) Budget..." ✗
 The col_id in suggestions MUST exactly match one of the IDs listed in "COLUMNS AVAILABLE FOR MAPPING".
 ');
-        $userPrompt = 'Analyse this learning and assessment mapping' . (self::js_truthy($unitCode) ? ' for unit ' . $unitCode : '')
-            . ".\n\nROWS (Elements and Performance Criteria):\n" . $rowSummary . "\n\nCOLUMNS AVAILABLE FOR MAPPING:\n"
-            . implode("\n", array_map(function($c) {
-                return '- ' . $c['id'] . ': "' . $c['title'] . '" (group: ' . self::js_str(self::js_or($c['group'] ?? null, 'custom')) . ')';
-            }, $mappableColumns)) . "\n";
-        if ($activitySummary !== '') {
-            $userPrompt .= "\nSCANNED COURSE ACTIVITIES (the text after each code is CONTEXT ONLY — do NOT copy it into cells. "
-                . "Only use the code e.g. T1, Q1, Act 1):\n" . $activitySummary;
+        $userprompt = 'Analyse this learning and assessment mapping' . (self::js_truthy($unitcode) ? ' for unit ' . $unitcode :
+            '')
+            . ".\n\nROWS (Elements and Performance Criteria):\n" . $rowsummary . "\n\nCOLUMNS AVAILABLE FOR MAPPING:\n"
+            . implode("\n", array_map(function ($c) {
+                return '- ' . $c['id'] . ': "' . $c['title'] . '" (group: ' . self::js_str(self::js_or(
+                    $c['group'] ?? null,
+                    'custom'
+                )) . ')';
+            }, $mappablecolumns)) . "\n";
+        if ($activitysummary !== '') {
+            $userprompt .= "\nSCANNED COURSE ACTIVITIES (the text after each code is CONTEXT ONLY — do NOT copy it into " .
+                "cells. "
+                . "Only use the code e.g. T1, Q1, Act 1):\n" . $activitysummary;
         }
-        if ($existingMappings !== '') {
-            $userPrompt .= "\nEXISTING MAPPINGS (already filled in by teacher):\n" . $existingMappings;
+        if ($existingmappings !== '') {
+            $userprompt .= "\nEXISTING MAPPINGS (already filled in by teacher):\n" . $existingmappings;
         }
-        $userPrompt .= ('
-Analyse ALL rows against ALL available activities. For EVERY [ROW], suggest which column cells should contain SHORT CODES ONLY (e.g. "T2", "Q1, Q3", "Act 1"). REMINDER: every suggestions value must be a short code — never a description, title, or question text. Be thorough — Knowledge Evidence rows need KC and EM question mappings, Performance Evidence rows need activity and assessment mappings, Foundation Skills rows MUST have cross-cutting activity mappings (never leave them blank). Use [maps-to-criteria] tags on KC questions as authoritative PC mappings. Identify gaps where no activity covers a requirement. Return JSON only.');
+        $userprompt .= ('
+Analyse ALL rows against ALL available activities. For EVERY [ROW], suggest which column cells should contain SHORT CODES ' .
+            'ONLY (e.g. "T2", "Q1, Q3", "Act 1"). REMINDER: every suggestions value must be a short code — never a ' .
+            'description, title, or question text. Be thorough — Knowledge Evidence rows need KC and EM question mappings, ' .
+            'Performance Evidence rows need activity and assessment mappings, Foundation Skills rows MUST have cross-cutting ' .
+            'activity mappings (never leave them blank). Use [maps-to-criteria] tags on KC questions as authoritative PC ' .
+            'mappings. Identify gaps where no activity covers a requirement. Return JSON only.');
 
-        if (!$isVetFramework) {
-            [$systemPrompt, $userPrompt] = self::nonvet_prompts($selectedFramework, $selectedFrameworkData, [
-                'rows' => $rowSummary,
-                'columns' => implode("\n", array_map(function($c) {
-                    return '- ' . $c['id'] . ': "' . $c['title'] . '" (' . self::js_str(self::js_or($c['group'] ?? null, 'custom')) . ')';
-                }, $mappableColumns)),
-                'activities' => $activitySummary,
-                'existingMappings' => $existingMappings,
+        if (!$isvetframework) {
+            [$systemprompt, $userprompt] = self::nonvet_prompts($selectedframework, $selectedframeworkdata, [
+                'rows' => $rowsummary,
+                'columns' => implode("\n", array_map(function ($c) {
+                    return '- ' . $c['id'] . ': "' . $c['title'] . '" (' . self::js_str(self::js_or(
+                        $c['group'] ?? null,
+                        'custom'
+                    )) . ')';
+                }, $mappablecolumns)),
+                'activities' => $activitysummary,
+                'existingMappings' => $existingmappings,
             ]);
         }
-        if (strpos($activitySummary, 'Built in AI Course Builder to teach these curriculum outcomes:') !== false) {
-            $userPrompt .= ('
+        if (strpos($activitysummary, 'Built in AI Course Builder to teach these curriculum outcomes:') !== false) {
+            $userprompt .= ('
 
-AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course Builder to teach these curriculum outcomes: ...". Each of those activities MUST be mapped to the [ROW] for every outcome it names (match the row text exactly, ignoring a trailing full stop). Use coverage "introduced" for Visual Learning, Content Creator and Slide Flow; "practised" for Learning Activities, Soft Skills, Branched Scenario, Safety Hazards and Anatomy; "assessed" for Knowledge Check. You may add other genuine links, but never omit a planned one, and never map an activity to an outcome it does not teach.');
+AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course Builder to teach these curriculum outcomes: ' .
+                '...". Each of those activities MUST be mapped to the [ROW] for every outcome it names (match the row text ' .
+                'exactly, ignoring a trailing full stop). Use coverage "introduced" for Visual Learning, Content Creator and ' .
+                'Slide Flow; "practised" for Learning Activities, Soft Skills, Branched Scenario, Safety Hazards and ' .
+                'Anatomy; "assessed" for Knowledge Check. You may add other genuine links, but never omit a planned one, and ' .
+                'never map an activity to an outcome it does not teach.');
         }
-        return [$systemPrompt, $userPrompt, $isVetFramework];
+        return [$systemprompt, $userprompt, $isvetframework];
     }
 
     /**
@@ -496,16 +572,16 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
      * @param bool $isVetFramework VET framework?
      * @return string
      */
-    private static function mapping_module(array $mod, bool $isVetFramework): string {
-        $g = function($k) use ($mod) {
+    private static function mapping_module(array $mod, bool $isvetframework): string {
+        $g = function ($k) use ($mod) {
             return $mod[$k] ?? null;
         };
         $s = '';
-        $sectionLabel = self::js_truthy($g('sectionName')) ? ' [Section: ' . $mod['sectionName'] . ']' : '';
-        $s .= "\n--- " . $mod['name'] . ' (' . $mod['modname'] . ')' . $sectionLabel . " ---\n";
+        $sectionlabel = self::js_truthy($g('sectionName')) ? ' [Section: ' . $mod['sectionName'] . ']' : '';
+        $s .= "\n--- " . $mod['name'] . ' (' . $mod['modname'] . ')' . $sectionlabel . " ---\n";
 
         if ($mod['modname'] === 'practicalassessment') {
-            if (!$isVetFramework) {
+            if (!$isvetframework) {
                 if (self::js_truthy($g('description'))) {
                     $s .= '  Activity context: ' . self::js_slice($mod['description'], 0, 800) . "\n";
                 }
@@ -536,7 +612,8 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
                 $s .= '  Unit: ' . $mod['unitcode'] . (self::js_truthy($g('unitname')) ? ' - ' . $mod['unitname'] : '') . "\n";
             }
             if (self::js_truthy($g('industry'))) {
-                $s .= '  Industry: ' . $mod['industry'] . (self::js_truthy($g('jobrole')) ? ', Job Role: ' . $mod['jobrole'] : '') . "\n";
+                $s .= '  Industry: ' . $mod['industry'] . (self::js_truthy($g('jobrole')) ? ', Job Role: ' . $mod['jobrole'] :
+                    '') . "\n";
             }
             if (self::js_truthy($g('occasions'))) {
                 $s .= '  Assessment Occasions: ' . self::js_str($mod['occasions']) . "\n";
@@ -561,8 +638,14 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
             if (self::js_truthy($g('workplaceForms')) && is_array($mod['workplaceForms'])) {
                 $s .= "  WORKPLACE FORMS (Documentary Evidence):\n";
                 foreach (array_values($mod['workplaceForms']) as $idx => $f) {
-                    $title = is_string($f) ? $f : self::js_or(self::js_or(self::js_get($f, 'title'), self::js_get($f, 'name')), '');
-                    $purpose = self::js_truthy(self::js_get($f, 'purpose')) ? ' — ' . self::js_str(self::js_get($f, 'purpose')) : '';
+                    $title = is_string($f) ? $f : self::js_or(
+                        self::js_or(self::js_get($f, 'title'), self::js_get($f, 'name')),
+                        ''
+                    );
+                    $purpose = self::js_truthy(self::js_get($f, 'purpose')) ? ' — ' . self::js_str(self::js_get(
+                        $f,
+                        'purpose'
+                    )) : '';
                     $s .= '    Form ' . ($idx + 1) . ': ' . self::js_str($title) . $purpose . "\n";
                 }
             }
@@ -599,16 +682,19 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
         }
         if (self::js_truthy($g('questions'))) {
             foreach (array_values($mod['questions']) as $idx => $q) {
-                $qType = self::js_truthy(self::js_get($q, 'type')) ? ' (' . self::js_str($q['type']) . ')' : '';
-                $criteriaHint = self::js_truthy(self::js_get($q, 'criteria')) ? ' [maps-to-criteria: ' . self::js_str($q['criteria']) . ']' : '';
-                $topicHint = self::js_truthy(self::js_get($q, 'topic')) ? ' [maps-to-topic: ' . self::js_str($q['topic']) . ']' : '';
-                $s .= '  Q' . ($idx + 1) . $qType . $criteriaHint . $topicHint . ': '
+                $qtype = self::js_truthy(self::js_get($q, 'type')) ? ' (' . self::js_str($q['type']) . ')' : '';
+                $criteriahint = self::js_truthy(self::js_get($q, 'criteria')) ? ' [maps-to-criteria: ' . self::js_str($q['cri' .
+                    'teria']) . ']' : '';
+                $topichint = self::js_truthy(self::js_get($q, 'topic')) ? ' [maps-to-topic: ' . self::js_str($q['topic']) .
+                    ']' : '';
+                $s .= '  Q' . ($idx + 1) . $qtype . $criteriahint . $topichint . ': '
                     . self::js_str(self::js_or(self::js_or(self::js_get($q, 'question'), self::js_get($q, 'text')), '')) . "\n";
             }
         }
         if (self::js_truthy($g('activities'))) {
             foreach (array_values($mod['activities']) as $idx => $a) {
-                $s .= '  Act ' . ($idx + 1) . ' (Activity ' . ($idx + 1) . '): ' . self::prop($a, 'title') . ' (' . self::prop($a, 'type') . ")\n";
+                $s .= '  Act ' . ($idx + 1) . ' (Activity ' . ($idx + 1) . '): ' . self::prop($a, 'title') . ' (' .
+                    self::prop($a, 'type') . ")\n";
             }
         }
         if (self::js_truthy($g('pages'))) {
@@ -618,7 +704,8 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
         }
         if (self::js_truthy($g('chapters'))) {
             foreach (array_values($mod['chapters']) as $idx => $ch) {
-                $prefix = self::js_truthy(self::js_get($ch, 'subchapter')) ? '    Sub-Ch' . ($idx + 1) : '  Ch' . ($idx + 1) . ' (Chapter ' . ($idx + 1) . ')';
+                $prefix = self::js_truthy(self::js_get($ch, 'subchapter')) ? '    Sub-Ch' . ($idx + 1) : '  Ch' . ($idx + 1) .
+                    ' (Chapter ' . ($idx + 1) . ')';
                 $s .= $prefix . ': ' . self::prop($ch, 'title') . "\n";
             }
         }
@@ -637,16 +724,16 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
             return ['ok' => false, 'error' => 'Validation error: ' . $invalid];
         }
         try {
-            [$systemPrompt, $userPrompt] = self::conditions_prompts($p);
-            $responseText = self::ai($systemPrompt, $userPrompt, 2000, 0.3, true);
+            [$systemprompt, $userprompt] = self::conditions_prompts($p);
+            $responsetext = self::ai($systemprompt, $userprompt, 2000, 0.3, true);
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => self::message($e)];
         }
-        $parsedResponse = json_decode($responseText, true);
+        $parsedresponse = json_decode($responsetext, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             return ['ok' => false, 'error' => 'AI returned invalid response format'];
         }
-        $results = is_array($parsedResponse) ? ($parsedResponse['results'] ?? null) : null;
+        $results = is_array($parsedresponse) ? ($parsedresponse['results'] ?? null) : null;
         return ['ok' => true, 'results' => self::js_truthy($results) ? $results : [], 'creditsUsed' => 0, 'byok' => true];
     }
 
@@ -657,74 +744,83 @@ AI COURSE BUILDER PLAN (authoritative): some activities say "Built in AI Course 
      * @return string[] [system, user]
      */
     public static function conditions_prompts(array $p): array {
-        $activitySummary = '';
+        $activitysummary = '';
         foreach ((array) ($p['scannedModules'] ?? []) as $mod) {
-            $g = function($k) use ($mod) {
+            $g = function ($k) use ($mod) {
                 return $mod[$k] ?? null;
             };
-            $activitySummary .= "\n[" . strtoupper($mod['modname']) . '] "' . $mod['name'] . '"';
+            $activitysummary .= "\n[" . strtoupper($mod['modname']) . '] "' . $mod['name'] . '"';
             if (self::js_truthy($g('sectionName'))) {
-                $activitySummary .= ' (Section: ' . $mod['sectionName'] . ')';
+                $activitysummary .= ' (Section: ' . $mod['sectionName'] . ')';
             }
-            $activitySummary .= "\n";
+            $activitysummary .= "\n";
             if (self::js_truthy($g('questions')) && count($mod['questions']) > 0) {
                 $n = count($mod['questions']);
-                $activitySummary .= "  {$n} questions:\n";
+                $activitysummary .= "  {$n} questions:\n";
                 foreach (array_slice(array_values($mod['questions']), 0, 15) as $idx => $q) {
-                    $qText = self::js_slice(self::js_or(self::js_or(self::js_get($q, 'question'), self::js_get($q, 'text')), ''), 0, 80);
-                    $qType = self::js_truthy(self::js_get($q, 'type')) ? ' [' . self::js_str($q['type']) . ']' : '';
-                    $activitySummary .= '  Q' . ($idx + 1) . $qType . ': ' . $qText . "\n";
+                    $qtext = self::js_slice(self::js_or(
+                        self::js_or(self::js_get($q, 'question'), self::js_get($q, 'text')),
+                        ''
+                    ), 0, 80);
+                    $qtype = self::js_truthy(self::js_get($q, 'type')) ? ' [' . self::js_str($q['type']) . ']' : '';
+                    $activitysummary .= '  Q' . ($idx + 1) . $qtype . ': ' . $qtext . "\n";
                 }
                 if ($n > 15) {
-                    $activitySummary .= '  ... (' . ($n - 15) . " more questions)\n";
+                    $activitysummary .= '  ... (' . ($n - 15) . " more questions)\n";
                 }
             }
-            $titles = function($list, $fmt) {
-                return implode(', ', array_map(function($x) use ($fmt) {
+            $titles = function ($list, $fmt) {
+                return implode(', ', array_map(function ($x) use ($fmt) {
                     $v = $fmt($x);
                     return $v === null ? '' : self::js_str($v);
                 }, array_slice(array_values($list), 0, 6)));
             };
-            $or = function($x, $k) {
+            $or = function ($x, $k) {
                 return self::js_or(self::js_get($x, $k), $x);
             };
             if (self::js_truthy($g('topics')) && count($mod['topics']) > 0) {
-                $activitySummary .= '  Topics (' . count($mod['topics']) . '): ' . $titles($mod['topics'], function($t) use ($or) {
-                    return $or($t, 'title');
-                }) . "\n";
+                $activitysummary .= '  Topics (' . count($mod['topics']) . '): ' . $titles(
+                    $mod['topics'],
+                    function ($t) use ($or) {
+                        return $or($t, 'title');
+                    }
+                ) . "\n";
             }
             if (self::js_truthy($g('activities')) && count($mod['activities']) > 0) {
-                $activitySummary .= '  Activities: ' . $titles($mod['activities'], function($a) {
+                $activitysummary .= '  Activities: ' . $titles($mod['activities'], function ($a) {
                     return self::prop($a, 'title') . ' (' . self::prop($a, 'type') . ')';
                 }) . "\n";
             }
             if (self::js_truthy($g('skills')) && count($mod['skills']) > 0) {
-                $activitySummary .= '  Observable Skills: ' . $titles($mod['skills'], function($x) use ($or) {
+                $activitysummary .= '  Observable Skills: ' . $titles($mod['skills'], function ($x) use ($or) {
                     return $or($x, 'title');
                 }) . "\n";
             }
             if (self::js_truthy($g('workplaceForms')) && count($mod['workplaceForms']) > 0) {
-                $activitySummary .= '  Workplace Forms: ' . $titles($mod['workplaceForms'], function($x) use ($or) {
+                $activitysummary .= '  Workplace Forms: ' . $titles($mod['workplaceForms'], function ($x) use ($or) {
                     return $or($x, 'title');
                 }) . "\n";
             }
             if (self::js_truthy($g('scenario'))) {
-                $activitySummary .= '  Scenario: ' . self::js_slice($mod['scenario'], 0, 100) . "\n";
+                $activitysummary .= '  Scenario: ' . self::js_slice($mod['scenario'], 0, 100) . "\n";
             }
             if (self::js_truthy($g('submissionPlugins')) && count($mod['submissionPlugins']) > 0) {
-                $activitySummary .= '  Submission type: ' . implode(', ', $mod['submissionPlugins']) . "\n";
+                $activitysummary .= '  Submission type: ' . implode(', ', $mod['submissionPlugins']) . "\n";
             }
         }
-        $conditionsList = implode("\n", array_map(function($ac, $idx) {
+        $conditionslist = implode("\n", array_map(function ($ac, $idx) {
             return ($idx + 1) . '. [ID:' . $ac['id'] . '] ' . $ac['text'];
         }, array_values($p['acData']), array_keys(array_values($p['acData']))));
-        $unitCode = $p['unitCode'] ?? null;
-        $systemPrompt = ('You are an expert in Australian VET compliance under ASQA 2025 Standards for RTOs. Analyse the provided course activities and generate concise evidence for an Assessment Conditions compliance checklist.
+        $unitcode = $p['unitCode'] ?? null;
+        $systemprompt = ('You are an expert in Australian VET compliance under ASQA 2025 Standards for RTOs. Analyse the ' .
+            'provided course activities and generate concise evidence for an Assessment Conditions compliance checklist.
 
 STRICT OUTPUT RULES:
 - "addressed": EXACTLY one sentence, maximum 20 words. No lists. No padding.
-- "evidence": List format ONLY — "Activity Name: Q1, Q3, Q5" or "Activity Name: Form 1, Form 2". Separate multiple activities with semicolons. NO sentences, NO prose.
-- Use "Activity Name (all questions)" ONLY when every single listed question for that activity clearly and directly relates to the condition.
+- "evidence": List format ONLY — "Activity Name: Q1, Q3, Q5" or "Activity Name: Form 1, Form 2". Separate multiple ' .
+            'activities with semicolons. NO sentences, NO prose.
+- Use "Activity Name (all questions)" ONLY when every single listed question for that activity clearly and directly relates ' .
+            'to the condition.
 - "status":
   - "met" = multiple strong, direct pieces of evidence across activities
   - "partial" = minimal, indirect, or single-activity evidence only
@@ -733,7 +829,8 @@ STRICT OUTPUT RULES:
 GROUNDING RULES — CRITICAL:
 - ONLY reference activities, questions, forms, or skills that appear explicitly in the COURSE ACTIVITIES data below.
 - Do NOT infer, extrapolate, or generalise beyond what is visible in the data.
-- Match each condition ONLY to questions or activities whose content directly demonstrates that specific requirement. Ignore loosely related or generic content.
+- Match each condition ONLY to questions or activities whose content directly demonstrates that specific requirement. Ignore ' .
+            'loosely related or generic content.
 - If no clear evidence exists in the provided data, return: addressed: "", evidence: "", status: ""
 
 GOOD EXAMPLES:
@@ -749,14 +846,15 @@ evidence: "Practical Assessment: Scenarios 1-3; Workplace Forms: Form 1, Form 2"
 BAD (never do this):
 evidence: "All assessments"  ← too vague, not grounded
 evidence: "The course includes questions about workplace safety..." ← prose, not list format
-addressed: "This condition is addressed through scenario-based methods as required by ASQA 2025." ← too long, repeats standard name');
-        $userPrompt = ('Unit: ' . self::js_str(self::js_or($unitCode, 'Not specified')) . '
+addressed: "This condition is addressed through scenario-based methods as required by ASQA 2025." ← too long, repeats ' .
+            'standard name');
+        $userprompt = ('Unit: ' . self::js_str(self::js_or($unitcode, 'Not specified')) . '
 
 COURSE ACTIVITIES:
-' . self::js_str(self::js_or($activitySummary, 'No activities scanned.')) . '
+' . self::js_str(self::js_or($activitysummary, 'No activities scanned.')) . '
 
 ASSESSMENT CONDITIONS TO ANALYSE (analyse each condition independently against the data above):
-' . self::js_str($conditionsList) . '
+' . self::js_str($conditionslist) . '
 
 Return a JSON object with a result for every condition ID listed above:
 {
@@ -769,7 +867,7 @@ Return a JSON object with a result for every condition ID listed above:
     }
   ]
 }');
-        return [$systemPrompt, $userPrompt];
+        return [$systemprompt, $userprompt];
     }
 
     /**
@@ -783,10 +881,12 @@ Return a JSON object with a result for every condition ID listed above:
             return 'rows: Required';
         }
         foreach ($p['rows'] as $i => $r) {
-            if (!is_array($r) || !is_string($r['id'] ?? null) || !is_string($r['title'] ?? null)
+            if (
+                !is_array($r) || !is_string($r['id'] ?? null) || !is_string($r['title'] ?? null)
                     || (array_key_exists('isElement', $r) && !is_bool($r['isElement']))
                     || (array_key_exists('isShaded', $r) && !is_bool($r['isShaded']))
-                    || (array_key_exists('parentId', $r) && $r['parentId'] !== null && !is_string($r['parentId']))) {
+                    || (array_key_exists('parentId', $r) && $r['parentId'] !== null && !is_string($r['parentId']))
+            ) {
                 return "rows.{$i}: Invalid";
             }
         }
@@ -794,8 +894,10 @@ Return a JSON object with a result for every condition ID listed above:
             return 'columns: Required';
         }
         foreach ($p['columns'] as $i => $c) {
-            if (!is_array($c) || !is_string($c['id'] ?? null) || !is_string($c['title'] ?? null)
-                    || (array_key_exists('group', $c) && !is_string($c['group']))) {
+            if (
+                !is_array($c) || !is_string($c['id'] ?? null) || !is_string($c['title'] ?? null)
+                    || (array_key_exists('group', $c) && !is_string($c['group']))
+            ) {
                 return "columns.{$i}: Invalid";
             }
         }
@@ -815,8 +917,12 @@ Return a JSON object with a result for every condition ID listed above:
         if (array_key_exists('framework', $p) && !in_array($p['framework'], self::FRAMEWORKS, true)) {
             return 'framework: Invalid';
         }
-        return self::validate_modules($p, ['unitcode', 'unitname', 'industry', 'jobrole', 'scenario', 'submissionInstructions'],
-            ['mappingHints'], true);
+        return self::validate_modules(
+            $p,
+            ['unitcode', 'unitname', 'industry', 'jobrole', 'scenario', 'submissionInstructions'],
+            ['mappingHints'],
+            true
+        );
     }
 
     /**
@@ -872,10 +978,12 @@ Return a JSON object with a result for every condition ID listed above:
                     return "scannedModules.{$i}.{$k}: Invalid";
                 }
             }
-            if (array_key_exists('submissionPlugins', $m) && (!is_array($m['submissionPlugins'])
-                    || !self::is_list($m['submissionPlugins']) || array_filter($m['submissionPlugins'], function($x) {
+            if (
+                array_key_exists('submissionPlugins', $m) && (!is_array($m['submissionPlugins'])
+                    || !self::is_list($m['submissionPlugins']) || array_filter($m['submissionPlugins'], function ($x) {
                         return !is_string($x);
-                    }))) {
+                    }))
+            ) {
                 return "scannedModules.{$i}.submissionPlugins: Invalid";
             }
             if ($occasions && array_key_exists('occasions', $m) && !is_int($m['occasions']) && !is_float($m['occasions'])) {
@@ -895,8 +1003,23 @@ Return a JSON object with a result for every condition ID listed above:
      */
     private static function nonvet_prompts(string $id, array $data, array $input): array {
         $framework = self::describe_framework($id, $data);
-        $details = implode("\n", array_merge(['Framework: ' . $framework['label']], $framework['levels'], $framework['metadata']));
-        $system = ('You map learning outcomes in the ' . self::js_str(self::js_get($framework, 'label')) . ' framework to the activities that introduce, practise, or assess them. Treat each [ROW] as an outcome or curriculum requirement, not as a regulated competency. Use the framework terms supplied below and do not introduce terminology or compliance claims from another framework. Return valid JSON only. Cell suggestions must contain only short activity identifiers (T1, Q1, Act 1, P1, Ch1, AS). For every suggested activity column, add a coverageTypes entry keyed by the exact same column id with one value: "introduced", "practised", or "assessed". Use "introduced" for first teaching/exposure, "practised" for rehearsal or formative work, and "assessed" only when the activity evaluates learner achievement. Do not classify an activity as assessed merely because it contains a question. Do not suggest existing cells again. Identify gaps honestly. Required shape: {"mappings":[{"rowId":"exact row id","suggestions":{"exact_col_id":"T1"},"coverageTypes":{"exact_col_id":"introduced"},"gaps":"optional"}],"summary":{"totalRows":0,"fullyCovered":0,"partiallyCovered":0,"notCovered":0,"recommendations":[]}}');
+        $details = implode("\n", array_merge(
+            ['Framework: ' . $framework['label']],
+            $framework['levels'],
+            $framework['metadata']
+        ));
+        $system = ('You map learning outcomes in the ' . self::js_str(self::js_get($framework, 'label')) . ' framework to ' .
+            'the activities that introduce, practise, or assess them. Treat each [ROW] as an outcome or curriculum ' .
+            'requirement, not as a regulated competency. Use the framework terms supplied below and do not introduce ' .
+            'terminology or compliance claims from another framework. Return valid JSON only. Cell suggestions must contain ' .
+            'only short activity identifiers (T1, Q1, Act 1, P1, Ch1, AS). For every suggested activity column, add a ' .
+            'coverageTypes entry keyed by the exact same column id with one value: "introduced", "practised", or "assessed". ' .
+            'Use "introduced" for first teaching/exposure, "practised" for rehearsal or formative work, and "assessed" only ' .
+            'when the activity evaluates learner achievement. Do not classify an activity as assessed merely because it ' .
+            'contains a question. Do not suggest existing cells again. Identify gaps honestly. Required shape: ' .
+            '{"mappings":[{"rowId":"exact row ' .
+            'id","suggestions":{"exact_col_id":"T1"},"coverageTypes":{"exact_col_id":"introduced"},"gaps":"optional"}],"summa' .
+            'ry":{"totalRows":0,"fullyCovered":0,"partiallyCovered":0,"notCovered":0,"recommendations":[]}}');
         $user = ('Framework details:
 ' . self::js_str($details) . '
 
@@ -912,7 +1035,8 @@ COURSE ACTIVITIES:
 EXISTING MAPPINGS:
 ' . self::js_str(self::js_or(self::js_get($input, 'existingMappings'), '(none)')) . '
 
-Map every outcome to relevant teaching and assessment activities. For each suggested column, return a coverage type. Return JSON only.');
+Map every outcome to relevant teaching and assessment activities. For each suggested column, return a coverage type. Return ' .
+        'JSON only.');
         return [$system, $user];
     }
 
@@ -931,7 +1055,8 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
             'au_curriculum' => ['Australian Curriculum', [['learningArea', 'Learning area'], ['strand', 'Strand'],
                 ['subStrand', 'Sub-strand'], ['contentDescriptor', 'Content descriptor']],
                 [['yearLevel', 'Year level'], ['achievementStandard', 'Achievement standard']]],
-            'sg_moe' => ['Singapore MOE', [['syllabus', 'Syllabus'], ['theme', 'Theme'], ['learningOutcome', 'Learning outcome']],
+            'sg_moe' => ['Singapore MOE', [['syllabus', 'Syllabus'], ['theme', 'Theme'], ['learningOutcome', 'Learning ' .
+                'outcome']],
                 [['level', 'Level'], ['syllabusCode', 'Syllabus code']]],
             'university' => ['University', [['course', 'Course'], ['courseLearningOutcome', 'Course learning outcome']],
                 [['creditPoints', 'Credit points'], ['graduateAttributes', 'Graduate attributes']]],
@@ -1018,8 +1143,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
      * @return string
      */
     private static function js_trim($s): string {
-        return preg_replace('/^[\s\x{00A0}\x{FEFF}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]+'
-            . '|[\s\x{00A0}\x{FEFF}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]+$/u', '', self::js_str($s));
+        return preg_replace(
+            '/^[\s\x{00A0}\x{FEFF}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]+'
+            . '|[\s\x{00A0}\x{FEFF}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]+$/u',
+            '',
+            self::js_str($s)
+        );
     }
 
     /**
@@ -1091,7 +1220,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
 
     // JavaScript semantics used by the ported prompt templates (generated with the port).
 
-    /** @param mixed $v @return bool JavaScript truthiness. */
+    /**
+     * Js truthy.
+     *
+     * @param mixed $v
+     * @return bool JavaScript truthiness.
+     */
     private static function js_truthy($v): bool {
         if (is_array($v) || is_object($v)) {
             return true;
@@ -1102,17 +1236,35 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return $v !== null && $v !== false && $v !== '' && $v !== 0 && $v !== 0.0;
     }
 
-    /** @param mixed $a @param mixed $b @return mixed a || b */
+    /**
+     * Js or.
+     *
+     * @param mixed $a
+     * @param mixed $b
+     * @return mixed a || b
+     */
     private static function js_or($a, $b) {
         return self::js_truthy($a) ? $a : $b;
     }
 
-    /** @param mixed $a @param mixed $b @return mixed a && b */
+    /**
+     * Js and.
+     *
+     * @param mixed $a
+     * @param mixed $b
+     * @return mixed a && b
+     */
     private static function js_and($a, $b) {
         return self::js_truthy($a) ? $b : $a;
     }
 
-    /** @param mixed $a @param mixed $b @return mixed a + b */
+    /**
+     * Js add.
+     *
+     * @param mixed $a
+     * @param mixed $b
+     * @return mixed a + b
+     */
     private static function js_add($a, $b) {
         if ((is_int($a) || is_float($a)) && (is_int($b) || is_float($b))) {
             return $a + $b;
@@ -1120,7 +1272,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return self::js_str($a) . self::js_str($b);
     }
 
-    /** @param mixed $v @return string String(v) */
+    /**
+     * Js str.
+     *
+     * @param mixed $v
+     * @return string String(v)
+     */
     private static function js_str($v): string {
         if ($v === null) {
             return 'null';
@@ -1139,7 +1296,7 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         }
         if (is_array($v)) {
             if ($v === [] || array_keys($v) === range(0, count($v) - 1)) {
-                return implode(',', array_map(function($x) {
+                return implode(',', array_map(function ($x) {
                     return $x === null ? '' : self::js_str($x);
                 }, $v));
             }
@@ -1148,7 +1305,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return (string) $v;
     }
 
-    /** @param mixed $v @return float Number(v) */
+    /**
+     * Js num.
+     *
+     * @param mixed $v
+     * @return float Number(v)
+     */
     private static function js_num($v) {
         if (is_int($v) || is_float($v)) {
             return $v;
@@ -1162,7 +1324,13 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return is_numeric(trim((string) $v)) ? trim((string) $v) + 0 : NAN;
     }
 
-    /** @param mixed $o @param mixed $k @return mixed o[k] or null */
+    /**
+     * Js get.
+     *
+     * @param mixed $o
+     * @param mixed $k
+     * @return mixed o[k] or null
+     */
     private static function js_get($o, $k) {
         if (is_array($o)) {
             return $o[$k] ?? null;
@@ -1173,7 +1341,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return null;
     }
 
-    /** @param mixed $v @return int .length */
+    /**
+     * Js len.
+     *
+     * @param mixed $v
+     * @return int .length
+     */
     private static function js_len($v): int {
         if (is_array($v)) {
             return count($v);
@@ -1181,7 +1354,13 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return strlen(mb_convert_encoding(self::js_str($v), 'UTF-16LE', 'UTF-8')) / 2;
     }
 
-    /** @param mixed $h @param mixed $n @return bool .includes() */
+    /**
+     * Js includes.
+     *
+     * @param mixed $h
+     * @param mixed $n
+     * @return bool .includes()
+     */
     private static function js_includes($h, $n): bool {
         if (is_array($h)) {
             return in_array($n, $h, true);
@@ -1189,7 +1368,14 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return strpos(self::js_str($h), self::js_str($n)) !== false;
     }
 
-    /** @param mixed $v @param int $a @param int|null $b @return mixed .slice() on strings (UTF-16) and arrays */
+    /**
+     * Js slice.
+     *
+     * @param mixed $v
+     * @param int $a
+     * @param int|null $b
+     * @return mixed .slice() on strings (UTF-16) and arrays
+     */
     private static function js_slice($v, $a = 0, $b = null) {
         if (is_array($v)) {
             $n = count($v);
@@ -1204,7 +1390,13 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return mb_convert_encoding(substr($u, $a * 2, max(0, $b - $a) * 2), 'UTF-8', 'UTF-16LE');
     }
 
-    /** @param mixed $v @param callable $f @return array .map() */
+    /**
+     * Js map.
+     *
+     * @param mixed $v
+     * @param callable $f
+     * @return array .map()
+     */
     private static function js_map($v, callable $f): array {
         $out = [];
         foreach (array_values((array) $v) as $i => $x) {
@@ -1213,7 +1405,13 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return $out;
     }
 
-    /** @param mixed $v @param callable $f @return array .filter() */
+    /**
+     * Js filter.
+     *
+     * @param mixed $v
+     * @param callable $f
+     * @return array .filter()
+     */
     private static function js_filter($v, callable $f): array {
         $out = [];
         foreach (array_values((array) $v) as $i => $x) {
@@ -1224,7 +1422,12 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return $out;
     }
 
-    /** @param mixed $v @return string typeof */
+    /**
+     * Js typeof.
+     *
+     * @param mixed $v
+     * @return string typeof
+     */
     private static function js_typeof($v): string {
         if (is_string($v)) {
             return 'string';
@@ -1238,7 +1441,14 @@ Map every outcome to relevant teaching and assessment activities. For each sugge
         return $v === null ? 'undefined' : 'object';
     }
 
-    /** @param mixed $s @param string $a @param string $b @return string .replace(string, string) */
+    /**
+     * Js replace first.
+     *
+     * @param mixed $s
+     * @param string $a
+     * @param string $b
+     * @return string .replace(string, string)
+     */
     private static function js_replace_first($s, $a, $b): string {
         $s = self::js_str($s);
         $p = strpos($s, $a);

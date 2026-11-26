@@ -64,7 +64,7 @@ $PAGE->requires->js_call_amd('mod_learningmapping/mapping', 'init', [
     $canmanage,
     sesskey(),
     $framework,
-    \mod_learningmapping\local\byok::enabled()
+    \mod_learningmapping\local\byok::enabled(),
 ]);
 
 echo $OUTPUT->header();
