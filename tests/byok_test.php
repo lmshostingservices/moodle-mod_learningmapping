@@ -27,6 +27,7 @@ use mod_learningmapping\local\byok;
  * @package    mod_learningmapping
  * @copyright  2026 LMS Hosting Services
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \mod_learningmapping\local\byok
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(byok::class)]
 final class byok_test extends \advanced_testcase {
