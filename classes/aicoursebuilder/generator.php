@@ -65,12 +65,14 @@ class generator {
             'idempotencyKey' => (string)($brief['idempotencyKey'] ?? ''),
             'attempt' => (int)($brief['attempt'] ?? 1),
         ];
-        $started = \local_aicoursebuilder\local\api_client::request_json(
-            'POST',
-            '/api/generate-learningmapping/start',
-            $payload,
-            20
-        );
+        // Bring your own AI: the analysis runs on this site's own AI when its licence routes text there.
+        $started = \mod_learningmapping\local\byok::handle('/api/generate-learningmapping/start', $payload)
+            ?? \local_aicoursebuilder\local\api_client::request_json(
+                'POST',
+                '/api/generate-learningmapping/start',
+                $payload,
+                20
+            );
         if (empty($started['ok']) || empty($started['jobId'])) {
             throw new \moodle_exception('generationfailed', 'local_aicoursebuilder', '', '', 'AI Mapping did not return a job id.');
         }
@@ -83,12 +85,13 @@ class generator {
         require_once($CFG->dirroot . '/mod/learningmapping/classes/manifest_storage.php');
         $cm = get_coursemodule_from_id('learningmapping', $cmid, 0, false, MUST_EXIST);
         $instance = $DB->get_record('learningmapping', ['id' => $cm->instance], '*', MUST_EXIST);
-        $poll = \local_aicoursebuilder\local\api_client::request_json(
-            'GET',
-            '/api/jobs/' . rawurlencode($jobid),
-            null,
-            20
-        );
+        $poll = \mod_learningmapping\local\byok::poll($jobid)
+            ?? \local_aicoursebuilder\local\api_client::request_json(
+                'GET',
+                '/api/jobs/' . rawurlencode($jobid),
+                null,
+                20
+            );
         if (in_array(($poll['status'] ?? ''), ['pending', 'processing'], true)) {
             return ['status' => 'running', 'retryable' => false];
         }

@@ -246,6 +246,15 @@
     color: #ffffff;
     letter-spacing: 0.02em;
 }
+.lm-step-badge.lm-step-badge-ownai {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    background: #e7f1fa;
+    color: #0a4b85;
+    box-shadow: inset 0 0 0 1px rgba(15, 108, 191, 0.25);
+}
 .lm-step-body {
     padding-left: 36px;
 }

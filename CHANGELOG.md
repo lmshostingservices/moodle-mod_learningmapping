@@ -1,5 +1,10 @@
 # AI Mapping
 
+## [1.1.0] - 2026-11-26
+
+### Added
+- Bring your own AI. When the site's AI Grader Central Config (1.1.0 or later) has a Bring your own AI licence and text is set to the site's own key or the Moodle AI subsystem, AI Analyse, Assessment Conditions analysis, unit text clean-up and Course Builder mappings run on that AI instead of LMS Labs credits. The prompts are the same as the LMS Labs service for every framework. The AI Analyse step shows "Your own AI" instead of a credit cost, and the confirmation says no credits are used. Looking up a unit on training.gov.au is free and still goes through LMS Labs, so it needs the LMS Labs Site ID and API key.
+
 ## [1.0.63] - 2026-11-13
 
 ### Added

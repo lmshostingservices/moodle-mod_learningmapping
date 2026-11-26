@@ -37,6 +37,9 @@ class provider implements
             'name' => 'privacy:metadata:learningmapping:name',
             'mappingdata' => 'privacy:metadata:learningmapping:mappingdata',
         ], 'privacy:metadata');
+        $collection->add_external_location_link('byok_aiprovider', [
+            'content' => 'privacy:metadata:byok_aiprovider:content',
+        ], 'privacy:metadata:byok_aiprovider');
 
         return $collection;
     }
